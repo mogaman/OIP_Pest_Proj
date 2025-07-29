@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis Results - OrganicGuard AI{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Page Header -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="display-6">
+                    <i class="fas fa-microscope me-2"></i>Analysis Results
+                </h1>
+                <a href="{{ url_for('analyze') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-camera me-2"></i>Analyze Another
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Image Display -->
+        <div class="col-lg-4">
+            <div class="analysis-card">
+                <h3 class="h5 mb-3">
+                    <i class="fas fa-image me-2"></i>Analyzed Image
+                </h3>
+                {% if image_path %}
+                <img src="{{ url_for('static', filename='uploads/' + image_path) }}" 
+                     alt="Analyzed pest image" 
+                     class="img-fluid rounded">
+                {% else %}
+                <div class="text-center p-4">
+                    <i class="fas fa-image fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No image available</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Identification Results -->
+        <div class="col-lg-8">
+            <div class="analysis-card">
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <h2 class="h3 mb-0">
+                        <i class="fas fa-bug me-2"></i>Pest Identification
+                    </h2>
+                    {% if prediction.prediction_success %}
+                    <span class="badge bg-success fs-6">
+                        <i class="fas fa-check me-1"></i>Identified
+                    </span>
+                    {% else %}
+                    <span class="badge bg-warning fs-6">
+                        <i class="fas fa-question me-1"></i>Uncertain
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- Pest Information -->
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <h3 class="h4 text-primary mb-2">{{ prediction.pest_name }}</h3>
+                        {% if treatment %}
+                        <p class="text-muted mb-3">
+                            <i class="fas fa-seedling me-2"></i>
+                            Commonly affects: {{ treatment.crops_affected }}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <div class="mb-2">
+                            <small class="text-muted d-block">Confidence Level</small>
+                            <div class="confidence-bar mb-2">
+                                <div class="confidence-fill" style="width: {{ prediction.confidence }}%"></div>
+                            </div>
+                            <strong class="h4 text-primary">{{ "%.1f"|format(prediction.confidence) }}%</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Severity Badge -->
+                {% if treatment %}
+                <div class="mb-4">
+                    <span class="severity-badge severity-{{ treatment.severity.lower() }}">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        {{ treatment.severity }} Severity
+                    </span>
+                </div>
+                {% endif %}
+
+                <!-- All Predictions (if available) -->
+                {% if prediction.all_predictions %}
+                <div class="mb-4">
+                    <h5>
+                        <i class="fas fa-chart-bar me-2"></i>All Predictions
+                    </h5>
+                    <div class="row">
+                        {% for pest, confidence in prediction.all_predictions.items() %}
+                        {% if confidence > 5 %}
+                        <div class="col-md-6 mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="small">{{ pest }}</span>
+                                <span class="small fw-bold">{{ "%.1f"|format(confidence) }}%</span>
+                            </div>
+                            <div class="confidence-bar small" style="height: 6px;">
+                                <div class="confidence-fill" style="width: {{ confidence }}%"></div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Treatment Recommendations -->
+    {% if treatment %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="analysis-card">
+                <h2 class="h3 mb-4">
+                    <i class="fas fa-leaf me-2"></i>Organic Treatment Options
+                </h2>
+                
+                <div class="row">
+                    {% for method in treatment.organic_treatments %}
+                    <div class="col-lg-6 col-xl-4 mb-4">
+                        <div class="treatment-method h-100">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h4 class="h5 mb-0">{{ method.method }}</h4>
+                                <span class="badge bg-success">{{ method.effectiveness }}</span>
+                            </div>
+                            
+                            <p class="mb-3">{{ method.description }}</p>
+                            
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-clock text-muted me-2"></i>
+                                        <small class="text-muted">{{ method.timeline }}</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-dollar-sign text-muted me-2"></i>
+                                        <small class="text-muted">{{ method.cost }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if method.application %}
+                            <div class="bg-light p-2 rounded">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <strong>Application:</strong> {{ method.application }}
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prevention Strategies -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="analysis-card">
+                <h2 class="h3 mb-4">
+                    <i class="fas fa-shield-alt me-2"></i>Prevention Strategies
+                </h2>
+                
+                <div class="row">
+                    {% for tip in treatment.prevention %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-check-circle text-success me-3 mt-1"></i>
+                            <span>{{ tip }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="analysis-card">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4 class="mb-2">Need More Help?</h4>
+                        <p class="text-muted mb-md-0">
+                            Chat with our AI expert for personalized advice and follow-up questions.
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <div class="d-flex gap-2 justify-content-md-end">
+                            <a href="{{ url_for('chat') }}" class="btn btn-primary">
+                                <i class="fas fa-comments me-2"></i>Ask AI Expert
+                            </a>
+                            <button class="btn btn-outline-secondary" onclick="saveAnalysis()">
+                                <i class="fas fa-save me-2"></i>Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Information -->
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="analysis-card text-center">
+                <i class="fas fa-certificate fa-2x text-success mb-3"></i>
+                <h5>OMRI Approved</h5>
+                <p class="text-muted small">All recommended treatments are approved for organic farming</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="analysis-card text-center">
+                <i class="fas fa-clock fa-2x text-primary mb-3"></i>
+                <h5>Time Sensitive</h5>
+                <p class="text-muted small">Apply treatments promptly for best results</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="analysis-card text-center">
+                <i class="fas fa-chart-line fa-2x text-warning mb-3"></i>
+                <h5>Monitor Progress</h5>
+                <p class="text-muted small">Track treatment effectiveness and pest populations</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Animate confidence bars on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const confidenceBars = document.querySelectorAll('.confidence-fill');
+        confidenceBars.forEach(function(bar) {
+            const width = bar.style.width;
+            bar.style.width = '0%';
+            setTimeout(function() {
+                bar.style.width = width;
+            }, 500);
+        });
+    });
+
+    // Save analysis function
+    function saveAnalysis() {
+        // Show success message
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-success alert-dismissible fade show';
+        alert.innerHTML = `
+            <i class="fas fa-check-circle me-2"></i>
+            Analysis saved successfully! You can view it in your history.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.querySelector('.container').insertBefore(alert, document.querySelector('.container').firstChild);
+        
+        // Auto-hide after 3 seconds
+        setTimeout(function() {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }, 3000);
+    }
+
+    // Print results function
+    function printResults() {
+        window.print();
+    }
+
+    // Share results function
+    function shareResults() {
+        if (navigator.share) {
+            navigator.share({
+                title: 'OrganicGuard AI - Pest Analysis Results',
+                text: `Identified pest: {{ prediction.pest_name }} with {{ "%.1f"|format(prediction.confidence) }}% confidence`,
+                url: window.location.href
+            });
+        } else {
+            // Fallback - copy to clipboard
+            navigator.clipboard.writeText(window.location.href).then(function() {
+                alert('Results link copied to clipboard!');
+            });
+        }
+    }
+</script>
+{% endblock %}

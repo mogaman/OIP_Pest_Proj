@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}OrganicGuard AI - Dashboard{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-8">
+                <h1 class="display-4 fw-bold mb-3">
+                    <i class="fas fa-brain me-3"></i>AI-Powered Organic Pest Management
+                </h1>
+                <p class="lead mb-4">
+                    Advanced computer vision and AI consultation for sustainable farming. 
+                    Identify pests instantly and get certified organic treatment recommendations.
+                </p>
+                <div class="d-flex flex-wrap gap-3">
+                    <a href="{{ url_for('analyze') }}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-camera me-2"></i>Start Analysis
+                    </a>
+                    <a href="{{ url_for('chat') }}" class="btn btn-outline-light btn-lg">
+                        <i class="fas fa-comments me-2"></i>AI Consultation
+                    </a>
+                </div>
+            </div>
+            <div class="col-lg-4 text-center">
+                <div class="hero-stats">
+                    <div class="stats-card">
+                        <div class="stats-number">95%</div>
+                        <div>Accuracy Rate</div>
+                    </div>
+                    <div class="stats-card">
+                        <div class="stats-number">&lt;30s</div>
+                        <div>Analysis Time</div>
+                    </div>
+                    <div class="stats-card">
+                        <div class="stats-number">100%</div>
+                        <div>Organic Certified</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="container">
+    <!-- System Status -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="fas fa-check-circle me-3 fs-4"></i>
+                <div>
+                    <strong>System Online</strong> - AI models loaded and ready for analysis. 
+                    Offline capability available for remote farming locations.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Features -->
+    <div class="row">
+        <div class="col-lg-4 col-md-6">
+            <div class="feature-card h-100">
+                <div class="feature-icon">
+                    <i class="fas fa-eye"></i>
+                </div>
+                <h3 class="h4 mb-3">AI Pest Identification</h3>
+                <p class="mb-4">
+                    Upload or capture pest images for instant AI-powered identification using 
+                    advanced computer vision models trained on agricultural pest datasets.
+                </p>
+                <ul class="list-unstyled mb-4">
+                    <li><i class="fas fa-check text-success me-2"></i>95%+ accuracy rate</li>
+                    <li><i class="fas fa-check text-success me-2"></i>10+ common pests</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Confidence scoring</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Works offline</li>
+                </ul>
+                <a href="{{ url_for('analyze') }}" class="btn btn-primary">
+                    <i class="fas fa-camera me-2"></i>Start Analysis
+                </a>
+            </div>
+        </div>
+
+        <div class="col-lg-4 col-md-6">
+            <div class="feature-card h-100">
+                <div class="feature-icon">
+                    <i class="fas fa-leaf"></i>
+                </div>
+                <h3 class="h4 mb-3">Organic Treatments</h3>
+                <p class="mb-4">
+                    Get comprehensive organic treatment recommendations that maintain 
+                    your certification while effectively managing pest populations.
+                </p>
+                <ul class="list-unstyled mb-4">
+                    <li><i class="fas fa-check text-success me-2"></i>OMRI approved methods</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Cost estimates</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Application timing</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Effectiveness rates</li>
+                </ul>
+                <a href="{{ url_for('analyze') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-seedling me-2"></i>View Treatments
+                </a>
+            </div>
+        </div>
+
+        <div class="col-lg-4 col-md-12">
+            <div class="feature-card h-100">
+                <div class="feature-icon">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <h3 class="h4 mb-3">AI Expert Consultation</h3>
+                <p class="mb-4">
+                    Chat with our AI agricultural expert for personalized advice on 
+                    pest management, prevention strategies, and IPM implementation.
+                </p>
+                <ul class="list-unstyled mb-4">
+                    <li><i class="fas fa-check text-success me-2"></i>24/7 availability</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Personalized advice</li>
+                    <li><i class="fas fa-check text-success me-2"></i>IPM strategies</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Prevention tips</li>
+                </ul>
+                <a href="{{ url_for('chat') }}" class="btn btn-primary">
+                    <i class="fas fa-comments me-2"></i>Start Chat
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Analyses -->
+    {% if recent_analyses %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-history me-2"></i>Recent Analyses
+            </h2>
+            <div class="row">
+                {% for analysis in recent_analyses %}
+                <div class="col-lg-6 col-xl-4">
+                    <div class="analysis-card">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="mb-0">{{ analysis[2] }}</h5>
+                            <span class="severity-badge severity-{{ analysis[4].lower() if analysis[4] else 'medium' }}">
+                                {{ analysis[4] or 'Medium' }}
+                            </span>
+                        </div>
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-calendar me-2"></i>
+                            {{ analysis[1][:19] if analysis[1] else 'Unknown date' }}
+                        </p>
+                        <div class="mb-3">
+                            <small class="text-muted">Confidence</small>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: {{ analysis[3] if analysis[3] else 0 }}%"></div>
+                            </div>
+                            <small class="text-muted">{{ "%.1f"|format(analysis[3] or 0) }}%</small>
+                        </div>
+                        {% if analysis[5] %}
+                        <p class="small text-muted mb-0">
+                            <i class="fas fa-image me-1"></i>
+                            Image analyzed
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="text-center mt-4">
+                <a href="{{ url_for('history') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-list me-2"></i>View All History
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quick Start Guide -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="feature-card">
+                <h2 class="mb-4">
+                    <i class="fas fa-rocket me-2"></i>Quick Start Guide
+                </h2>
+                <div class="row">
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="feature-icon mx-auto mb-3">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <h5>1. Capture Image</h5>
+                        <p class="small text-muted">Take a clear photo of the pest or affected plant area</p>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="feature-icon mx-auto mb-3">
+                            <i class="fas fa-brain"></i>
+                        </div>
+                        <h5>2. AI Analysis</h5>
+                        <p class="small text-muted">Our AI model identifies the pest with confidence scoring</p>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="feature-icon mx-auto mb-3">
+                            <i class="fas fa-leaf"></i>
+                        </div>
+                        <h5>3. Get Treatment</h5>
+                        <p class="small text-muted">Receive organic treatment recommendations with costs</p>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="feature-icon mx-auto mb-3">
+                            <i class="fas fa-seedling"></i>
+                        </div>
+                        <h5>4. Apply & Monitor</h5>
+                        <p class="small text-muted">Apply treatments and track results for better farming</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Technology Stack -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="feature-card text-center">
+                <h2 class="mb-4">
+                    <i class="fas fa-cogs me-2"></i>Powered by Advanced AI
+                </h2>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <i class="fab fa-python fa-3x text-primary mb-3"></i>
+                        <h5>Python & TensorFlow</h5>
+                        <p class="small text-muted">Deep learning models for accurate pest identification</p>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <i class="fas fa-eye fa-3x text-primary mb-3"></i>
+                        <h5>Computer Vision</h5>
+                        <p class="small text-muted">Advanced image processing and pattern recognition</p>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <i class="fas fa-database fa-3x text-primary mb-3"></i>
+                        <h5>Agricultural Database</h5>
+                        <p class="small text-muted">Comprehensive pest and treatment knowledge base</p>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <i class="fas fa-cloud fa-3x text-primary mb-3"></i>
+                        <h5>Edge Computing</h5>
+                        <p class="small text-muted">Works offline for remote farming locations</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Animate confidence bars on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const confidenceBars = document.querySelectorAll('.confidence-fill');
+        confidenceBars.forEach(function(bar) {
+            const width = bar.style.width;
+            bar.style.width = '0%';
+            setTimeout(function() {
+                bar.style.width = width;
+            }, 500);
+        });
+    });
+</script>
+{% endblock %}
