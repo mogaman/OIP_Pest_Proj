@@ -2,6 +2,9 @@
 Flask==2.3.3
 Werkzeug==2.3.7
 
+# Modern UI framework
+gradio==4.8.0
+
 # Machine Learning and AI
 tensorflow==2.13.0
 transformers==4.33.2

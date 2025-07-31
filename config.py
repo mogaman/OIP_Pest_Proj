@@ -76,43 +76,69 @@ config = {
 
 # Pest classification settings
 PEST_CLASSES = [
-    'Aphids',
-    'Armyworm', 
-    'Beetle',
-    'Bollworm',
-    'Grasshopper',
-    'Mites',
-    'Sawfly',
-    'Stem Borer',
-    'Thrips',
-    'Whitefly'
+    'ants',
+    'bees',
+    'beetle', 
+    'catterpillar',
+    'earthworms',
+    'earwig',
+    'grasshopper',
+    'moth',
+    'slug',
+    'snail',
+    'wasp',
+    'weevil'
 ]
 
 # Treatment effectiveness data
 TREATMENT_EFFECTIVENESS = {
     'Insecticidal Soap': {
-        'Aphids': 85,
-        'Whitefly': 75,
-        'Thrips': 70,
-        'Mites': 80
+        'ants': 70,
+        'beetle': 75,
+        'catterpillar': 65,
+        'earwig': 70,
+        'slug': 60,
+        'snail': 60
     },
     'Neem Oil': {
-        'Aphids': 80,
-        'Beetle': 70,
-        'Whitefly': 85,
-        'Thrips': 75,
-        'Mites': 85
+        'ants': 75,
+        'beetle': 85,
+        'catterpillar': 80,
+        'earwig': 75,
+        'moth': 70,
+        'weevil': 80
     },
     'Beneficial Insects': {
-        'Aphids': 90,
-        'Whitefly': 85,
-        'Thrips': 80,
-        'Mites': 90
+        'catterpillar': 90,
+        'beetle': 85,
+        'moth': 80,
+        'weevil': 85
     },
     'Diatomaceous Earth': {
-        'Beetle': 75,
-        'Grasshopper': 70,
-        'Armyworm': 65
+        'ants': 80,
+        'beetle': 85,
+        'catterpillar': 70,
+        'earwig': 85,
+        'slug': 90,
+        'snail': 90,
+        'weevil': 75
+    },
+    'Coffee Grounds': {
+        'ants': 75,
+        'slug': 80,
+        'snail': 80
+    },
+    'Hand Picking': {
+        'catterpillar': 95,
+        'beetle': 90,
+        'slug': 95,
+        'snail': 95
+    },
+    'Row Covers': {
+        'beetle': 90,
+        'catterpillar': 85,
+        'grasshopper': 95,
+        'moth': 80
     }
 }
 
@@ -164,7 +190,7 @@ MODEL_CONFIG = {
     'input_shape': (224, 224, 3),
     'num_classes': len(PEST_CLASSES),
     'batch_size': 32,
-    'epochs': 50,
+    'epochs': 20,
     'learning_rate': 0.001,
     'validation_split': 0.2,
     'early_stopping_patience': 10,

@@ -58,35 +58,63 @@ A comprehensive Python-based web application for AI-powered organic pest identif
    pip install -r requirements.txt
    ```
 
-4. **Initialize the database**
+4. **Prepare your dataset (Optional - for training)**
    ```bash
-   python -c "from app import init_database; init_database()"
+   python dataset_utils.py
    ```
 
-5. **Run the application**
+5. **Launch the system**
    ```bash
+   # Option A: Interactive launcher (recommended)
+   python main_launcher.py
+   
+   # Option B: Direct web app launch
    python app.py
+   
+   # Option C: Modern Gradio interface
+   python gradio_interface.py
    ```
 
 6. **Access the application**
-   Open your browser and navigate to: `http://localhost:5000`
+   - **Flask Web App**: `http://localhost:5000`
+   - **Gradio Interface**: `http://localhost:7860` (auto-opens)
 
 ## 📱 Usage Guide
 
-### 1. Pest Identification
+### Getting Started
+1. **Launch the system**: Run `python main_launcher.py` for interactive menu
+2. **Choose interface**: Select Flask web app or modern Gradio interface
+3. **Train model** (optional): Use enhanced or standard training options
+
+### Interface Options
+
+#### 1. Flask Web Application (Traditional)
 1. Navigate to the "Analyze" page
 2. Upload or capture an image of the pest
 3. Wait for AI analysis (typically 10-30 seconds)
 4. Review identification results and confidence score
 5. Get organic treatment recommendations
 
-### 2. AI Consultation
+#### 2. Gradio Interface (Modern)
+1. **Real-time Analysis**: Drag and drop images for instant results
+2. **Treatment Advice**: Get immediate organic treatment recommendations
+3. **Confidence Scores**: See prediction reliability
+4. **Mobile Friendly**: Works perfectly on phones and tablets
+5. **Share Results**: Generate public links for sharing (optional)
+
+### 3. AI Consultation (Flask Only)
 1. Go to the "AI Chat" page
 2. Ask questions about pest management
 3. Get expert advice on organic farming practices
 4. Receive personalized recommendations
 
-### 3. History Tracking
+### 4. Training Your Own Model
+1. **Prepare Dataset**: Use `dataset_utils.py` to organize images
+2. **Enhanced Training**: Run `enhanced_trainer.py` for best results
+3. **Monitor Progress**: Watch training metrics in real-time
+4. **Resume Training**: Safely interrupt and continue later
+
+### 5. History Tracking (Flask Only)
 1. View past analyses in the "History" section
 2. Filter results by pest type, severity, or date
 3. Add treatment notes and observations
@@ -94,12 +122,45 @@ A comprehensive Python-based web application for AI-powered organic pest identif
 
 ## 🧠 AI Model Details
 
-### Pest Classification Model
-- **Architecture**: Convolutional Neural Network (CNN)
+### Advanced Training Options
+The system now offers two training approaches:
+
+#### Enhanced CNN Training (Recommended)
+- **Architecture**: Advanced CNN with residual connections
 - **Input Size**: 224x224 RGB images
+- **Advanced Features**: 
+  - Residual blocks for better gradient flow
+  - Label smoothing for improved calibration
+  - Class balancing for imbalanced datasets
+  - Comprehensive checkpointing system
+  - Cosine annealing learning rate schedule
+- **Training Time**: 1-2 hours (enhanced features)
+- **Expected Accuracy**: 92-97% validation accuracy
+
+#### Standard CNN Training
+- **Architecture**: Traditional CNN layers
+- **Input Size**: 224x224 RGB images  
+- **Training Time**: 30-60 minutes
+- **Expected Accuracy**: 85-92% validation accuracy
+
+### Multiple Interface Options
+1. **Flask Web Application** (Original)
+   - Traditional web interface with database integration
+   - User management and history tracking
+   - Full-featured pest management system
+
+2. **Gradio Interface** (New!)
+   - Modern, responsive UI with drag-and-drop
+   - Real-time predictions with confidence scores
+   - Organic treatment recommendations
+   - Public sharing capability
+   - Mobile-friendly design
+
+### Pest Classification Model
+- **Framework**: TensorFlow/Keras
 - **Output Classes**: 10 common agricultural pests
 - **Training Data**: Agricultural pest image datasets
-- **Framework**: TensorFlow/Keras
+- **Processing Speed**: <30 seconds per image
 
 ### Supported Pest Types
 - Aphids
@@ -170,22 +231,30 @@ A comprehensive Python-based web application for AI-powered organic pest identif
 ### File Structure
 ```
 organic_farm_pest/
-├── app.py                 # Main Flask application
-├── requirements.txt       # Python dependencies
-├── README.md             # Project documentation
-├── templates/            # HTML templates
+├── main_launcher.py       # 🚀 Interactive system launcher
+├── app.py                 # 🌐 Main Flask web application
+├── enhanced_trainer.py    # 🧠 Advanced CNN training system
+├── gradio_interface.py    # 🎨 Modern Gradio web interface
+├── dataset_utils.py       # 📊 Dataset preparation and validation
+├── train_model.py         # 📈 Standard CNN training (original)
+├── config.py             # ⚙️ Configuration settings
+├── requirements.txt       # 📦 Python dependencies
+├── README.md             # 📖 Project documentation
+├── templates/            # 🌐 HTML templates for Flask
 │   ├── base.html
 │   ├── index.html
 │   ├── analyze.html
 │   ├── results.html
 │   ├── chat.html
 │   └── history.html
-├── static/               # Static assets
+├── static/               # 🎨 Static assets and uploads
 │   ├── uploads/          # User uploaded images
 │   └── css/              # Custom styles
-├── models/               # AI model files
-├── data/                 # Database and data files
-└── docs/                 # Additional documentation
+├── models/               # 🧠 AI model files and checkpoints
+├── pest_dataset/         # 📸 Training dataset organization
+├── data/                 # 💾 Database and analysis data
+├── logs/                 # 📝 Training and application logs
+└── docs/                 # 📚 Additional documentation
 ```
 
 ## 🔧 Configuration
@@ -215,15 +284,37 @@ OPENAI_API_KEY=your-openai-key
 DEEPSEEK_API_KEY=your-deepseek-key
 ```
 
-### Model Training (Optional)
-To train your own pest classification model:
+### Model Training (Enhanced Options)
+To train your own pest classification model with advanced features:
 
-1. Prepare dataset with labeled pest images
-2. Organize images in class-specific folders
-3. Run the training script:
-   ```bash
-   python train_model.py --data_dir dataset/ --epochs 50
-   ```
+#### Option 1: Interactive Training (Recommended)
+```bash
+python main_launcher.py
+# Choose option 1 for enhanced training or option 2 for standard training
+```
+
+#### Option 2: Direct Enhanced Training
+```bash
+python enhanced_trainer.py
+```
+
+#### Option 3: Dataset Preparation
+```bash
+python dataset_utils.py
+# Organize and validate your pest image dataset
+```
+
+#### Option 4: Standard Training (Original)
+```bash
+python train_model.py --data_dir dataset/ --epochs 50
+```
+
+### Enhanced Training Features
+- **Resumable Training**: Automatic checkpointing allows safe interruption
+- **Advanced Augmentation**: Geometric, color, and noise transformations
+- **Class Balancing**: Handles imbalanced datasets automatically
+- **Real-time Monitoring**: Progress tracking with detailed metrics
+- **Flexible Architecture**: Customizable model depth and complexity
 
 ## 📊 Performance Optimization
 

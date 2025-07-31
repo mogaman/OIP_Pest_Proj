@@ -16,6 +16,17 @@ from werkzeug.utils import secure_filename
 import random
 import logging
 
+# Import TensorFlow for model loading
+try:
+    import tensorflow as tf
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
+    print("⚠️ TensorFlow not available - using demo classifier")
+
+# Import config for pest classes
+from config import PEST_CLASSES
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,18 +41,36 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('models', exist_ok=True)
 os.makedirs('data', exist_ok=True)
 
-class SimplePestClassifier:
-    """Simplified pest classifier for demo purposes"""
+class PestClassifier:
+    """Real pest classifier using trained model"""
     
     def __init__(self):
-        self.class_names = [
-            'Aphids', 'Armyworm', 'Beetle', 'Bollworm', 'Grasshopper',
-            'Mites', 'Sawfly', 'Stem Borer', 'Thrips', 'Whitefly'
-        ]
+        self.class_names = PEST_CLASSES
         self.confidence_threshold = 0.6
+        self.model = None
+        self.model_path = 'models/pest_classifier.h5'
         
+        # Try to load trained model
+        self.load_model()
+        
+    def load_model(self):
+        """Load the trained model if available"""
+        try:
+            if TENSORFLOW_AVAILABLE and os.path.exists(self.model_path):
+                self.model = tf.keras.models.load_model(self.model_path)
+                logger.info(f"✅ Loaded trained model from {self.model_path}")
+            else:
+                if not TENSORFLOW_AVAILABLE:
+                    logger.warning("⚠️ TensorFlow not available - using demo mode")
+                else:
+                    logger.warning(f"⚠️ No trained model found at {self.model_path} - using demo mode")
+                self.model = None
+        except Exception as e:
+            logger.error(f"❌ Error loading model: {e}")
+            self.model = None
+    
     def predict(self, image):
-        """Simple prediction based on image analysis"""
+        """Predict pest type from image"""
         try:
             if isinstance(image, str):
                 # If image is base64 string
@@ -52,47 +81,12 @@ class SimplePestClassifier:
             if image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            # Simple color-based classification for demo
-            img_array = np.array(image.resize((224, 224)))
-            
-            # Calculate average color values
-            avg_red = np.mean(img_array[:, :, 0])
-            avg_green = np.mean(img_array[:, :, 1])
-            avg_blue = np.mean(img_array[:, :, 2])
-            
-            # Simple heuristic classification based on dominant colors
-            if avg_green > avg_red and avg_green > avg_blue:
-                # Green dominant - likely plant with aphids
-                pest_index = 0  # Aphids
-                confidence = 0.85 + random.uniform(-0.15, 0.10)
-            elif avg_red > avg_green and avg_red > avg_blue:
-                # Red dominant - might be mites
-                pest_index = 5  # Mites
-                confidence = 0.78 + random.uniform(-0.10, 0.15)
-            elif avg_blue > avg_red and avg_blue > avg_green:
-                # Blue dominant - unusual, default to thrips
-                pest_index = 8  # Thrips
-                confidence = 0.72 + random.uniform(-0.12, 0.18)
+            # Use real model if available
+            if self.model is not None:
+                return self._predict_with_model(image)
             else:
-                # Mixed colors - beetle or other
-                pest_index = random.choice([2, 4, 6])  # Beetle, Grasshopper, or Sawfly
-                confidence = 0.75 + random.uniform(-0.20, 0.20)
-            
-            # Ensure confidence is within bounds
-            confidence = max(0.5, min(0.95, confidence))
-            
-            pest_name = self.class_names[pest_index]
-            
-            return {
-                'pest_name': pest_name,
-                'confidence': confidence * 100,
-                'prediction_success': confidence >= self.confidence_threshold,
-                'all_predictions': {
-                    name: random.uniform(5, 95) if name == pest_name else random.uniform(1, 30)
-                    for name in self.class_names
-                }
-            }
-            
+                return self._predict_demo_mode(image)
+                
         except Exception as e:
             logger.error(f"Prediction error: {e}")
             return {
@@ -101,195 +95,507 @@ class SimplePestClassifier:
                 'prediction_success': False,
                 'error': str(e)
             }
+    
+    def _predict_with_model(self, image):
+        """Real prediction using trained model"""
+        try:
+            # Preprocess image for model
+            img_array = np.array(image.resize((224, 224))) / 255.0
+            img_array = np.expand_dims(img_array, axis=0)
+            
+            # Get predictions
+            predictions = self.model.predict(img_array, verbose=0)
+            predicted_class = np.argmax(predictions[0])
+            confidence = float(predictions[0][predicted_class])
+            
+            pest_name = self.class_names[predicted_class]
+            
+            # Create all predictions dictionary
+            all_predictions = {}
+            for i, class_name in enumerate(self.class_names):
+                all_predictions[class_name] = float(predictions[0][i] * 100)
+            
+            return {
+                'pest_name': pest_name,
+                'confidence': confidence * 100,
+                'prediction_success': confidence >= self.confidence_threshold,
+                'all_predictions': all_predictions,
+                'model_used': 'trained_model'
+            }
+            
+        except Exception as e:
+            logger.error(f"Model prediction error: {e}")
+            return self._predict_demo_mode(image)
+    
+    def _predict_demo_mode(self, image):
+        """Fallback demo prediction when model not available"""
+        logger.info("🔄 Using demo mode - train a model for real predictions")
+        
+        # Simple color-based classification for demo
+        img_array = np.array(image.resize((224, 224)))
+        
+        # Calculate average color values
+        avg_red = np.mean(img_array[:, :, 0])
+        avg_green = np.mean(img_array[:, :, 1])
+        avg_blue = np.mean(img_array[:, :, 2])
+        
+        # Simple heuristic classification based on dominant colors
+        if avg_green > avg_red and avg_green > avg_blue:
+            # Green dominant - likely plant with ants
+            pest_index = 0  # ants
+            confidence = 0.85 + random.uniform(-0.15, 0.10)
+        elif avg_red > avg_green and avg_red > avg_blue:
+            # Red dominant - might be beetle
+            pest_index = 2  # beetle
+            confidence = 0.78 + random.uniform(-0.10, 0.15)
+        elif avg_blue > avg_red and avg_blue > avg_green:
+            # Blue dominant - unusual, default to moth
+            pest_index = 8  # moth
+            confidence = 0.72 + random.uniform(-0.12, 0.18)
+        else:
+            # Mixed colors - random selection
+            pest_index = random.choice([3, 6, 9])  # catterpillar, earwig, slug
+            confidence = 0.75 + random.uniform(-0.20, 0.20)
+        
+        # Ensure confidence is within bounds
+        confidence = max(0.5, min(0.95, confidence))
+        
+        pest_name = self.class_names[pest_index]
+        
+        return {
+            'pest_name': pest_name,
+            'confidence': confidence * 100,
+            'prediction_success': confidence >= self.confidence_threshold,
+            'all_predictions': {
+                name: random.uniform(5, 95) if name == pest_name else random.uniform(1, 30)
+                for name in self.class_names
+            },
+            'model_used': 'demo_mode'
+        }
 
 class OrganicTreatmentDatabase:
     """Database for organic pest treatment recommendations"""
     
     def __init__(self):
         self.treatments = {
-            'Aphids': {
-                'severity': 'Medium',
-                'crops_affected': 'Vegetables, fruits, herbs, ornamentals',
+            'ants': {
+                'severity': 'Low',
+                'crops_affected': 'Various crops, gardens',
                 'organic_treatments': [
                     {
-                        'method': 'Insecticidal Soap Spray',
-                        'description': 'Mix 2 tablespoons of mild liquid soap per gallon of water. Spray directly on aphids.',
-                        'effectiveness': '85%',
+                        'method': 'Coffee Grounds',
+                        'description': 'Spread used coffee grounds around plants. Ants dislike the acidity.',
+                        'effectiveness': '75%',
+                        'timeline': '1-2 days',
+                        'cost': '$5-10/acre',
+                        'application': 'Apply dry grounds weekly around affected areas'
+                    },
+                    {
+                        'method': 'Cinnamon Barrier',
+                        'description': 'Sprinkle ground cinnamon around plants to deter ants.',
+                        'effectiveness': '70%',
                         'timeline': '2-3 days',
                         'cost': '$10-15/acre',
-                        'application': 'Spray early morning or evening every 3-4 days until controlled'
+                        'application': 'Reapply after rain or watering'
                     },
                     {
-                        'method': 'Neem Oil Treatment',
-                        'description': 'Apply neem oil solution (2-4 tablespoons per gallon) to affected areas.',
+                        'method': 'Diatomaceous Earth',
+                        'description': 'Apply food-grade diatomaceous earth around ant trails.',
                         'effectiveness': '80%',
                         'timeline': '3-5 days',
-                        'cost': '$20-25/acre',
-                        'application': 'Apply every 7-14 days as preventive measure'
-                    },
-                    {
-                        'method': 'Beneficial Insects Release',
-                        'description': 'Release ladybugs, lacewings, or parasitic wasps for biological control.',
-                        'effectiveness': '90%',
-                        'timeline': '1-2 weeks',
-                        'cost': '$30-50/acre',
-                        'application': 'Release when temperatures are 65-85°F'
+                        'cost': '$15-20/acre',
+                        'application': 'Apply in dry weather, reapply as needed'
                     }
                 ],
                 'prevention': [
-                    'Regular monitoring and early detection',
-                    'Encourage beneficial insects with diverse plantings',
-                    'Avoid over-fertilizing with nitrogen',
-                    'Use reflective mulches to deter aphids',
-                    'Remove weeds that harbor aphids'
+                    'Remove food sources and standing water',
+                    'Seal entry points around garden beds',
+                    'Plant mint or tansy as natural deterrents',
+                    'Keep garden clean of fallen fruit',
+                    'Use ant-resistant plant varieties'
                 ]
             },
-            'Beetle': {
+            'bees': {
+                'severity': 'Beneficial',
+                'crops_affected': 'All flowering crops (BENEFICIAL)',
+                'organic_treatments': [
+                    {
+                        'method': 'Protection & Encouragement',
+                        'description': '🌟 PROTECT BEES! They are essential pollinators - do not treat as pests.',
+                        'effectiveness': '100%',
+                        'timeline': 'Ongoing',
+                        'cost': '$0/acre',
+                        'application': 'Provide bee-friendly flowers and avoid pesticides during bloom'
+                    },
+                    {
+                        'method': 'Bee-Friendly Plants',
+                        'description': 'Plant lavender, sunflowers, and native wildflowers to support bees.',
+                        'effectiveness': '95%',
+                        'timeline': 'Season-long',
+                        'cost': '$20-30/acre',
+                        'application': 'Plant diverse flowering species for continuous bloom'
+                    }
+                ],
+                'prevention': [
+                    'Never apply pesticides during flowering',
+                    'Provide clean water sources',
+                    'Plant diverse native flowers',
+                    'Avoid disturbing natural nesting sites',
+                    'Support local beekeepers'
+                ]
+            },
+            'beetle': {
                 'severity': 'High',
-                'crops_affected': 'Potatoes, tomatoes, beans, cucumbers',
+                'crops_affected': 'Potatoes, beans, cucumbers, squash',
                 'organic_treatments': [
                     {
                         'method': 'Hand Picking',
-                        'description': 'Remove beetles manually during early morning when they are sluggish.',
-                        'effectiveness': '70%',
+                        'description': 'Remove beetles manually during early morning when sluggish.',
+                        'effectiveness': '85%',
                         'timeline': 'Immediate',
-                        'cost': '$5-10/acre (labor)',
+                        'cost': '$10-15/acre (labor)',
                         'application': 'Daily inspection and removal during peak activity'
                     },
                     {
-                        'method': 'Beneficial Nematodes',
-                        'description': 'Apply beneficial nematodes to soil to target beetle larvae.',
+                        'method': 'Neem Oil Spray',
+                        'description': 'Apply neem oil solution to affected plants and soil.',
+                        'effectiveness': '80%',
+                        'timeline': '3-7 days',
+                        'cost': '$20-25/acre',
+                        'application': 'Spray every 7-10 days during beetle season'
+                    },
+                    {
+                        'method': 'Row Covers',
+                        'description': 'Use floating row covers during vulnerable plant stages.',
+                        'effectiveness': '90%',
+                        'timeline': 'Season-long',
+                        'cost': '$200-300/acre',
+                        'application': 'Install before beetle emergence, remove during pollination'
+                    }
+                ],
+                'prevention': [
+                    'Crop rotation every 2-3 years',
+                    'Deep cultivation in fall',
+                    'Plant trap crops like radishes',
+                    'Encourage ground beetles and spiders',
+                    'Remove plant debris promptly'
+                ]
+            },
+            'catterpillar': {
+                'severity': 'Medium',
+                'crops_affected': 'Brassicas, tomatoes, corn, various vegetables',
+                'organic_treatments': [
+                    {
+                        'method': 'Bt Spray (Bacillus thuringiensis)',
+                        'description': 'Apply Bt spray targeting caterpillar larvae in evening.',
+                        'effectiveness': '90%',
+                        'timeline': '3-5 days',
+                        'cost': '$25-30/acre',
+                        'application': 'Spray when caterpillars are small, reapply every 7-10 days'
+                    },
+                    {
+                        'method': 'Hand Picking',
+                        'description': 'Remove caterpillars manually when visible.',
+                        'effectiveness': '95%',
+                        'timeline': 'Immediate',
+                        'cost': '$15-20/acre (labor)',
+                        'application': 'Daily inspection, especially undersides of leaves'
+                    },
+                    {
+                        'method': 'Neem Oil',
+                        'description': 'Apply neem oil to disrupt caterpillar feeding and growth.',
+                        'effectiveness': '75%',
+                        'timeline': '5-7 days',
+                        'cost': '$20-25/acre',
+                        'application': 'Apply every 10-14 days as preventive measure'
+                    }
+                ],
+                'prevention': [
+                    'Use pheromone traps for monitoring',
+                    'Encourage birds and beneficial wasps',
+                    'Plant companion plants like dill and fennel',
+                    'Rotate crops annually',
+                    'Remove egg masses when found'
+                ]
+            },
+            'earthworms': {
+                'severity': 'Beneficial',
+                'crops_affected': 'All crops (HIGHLY BENEFICIAL)',
+                'organic_treatments': [
+                    {
+                        'method': 'Protection & Encouragement',
+                        'description': '🌟 PROTECT EARTHWORMS! They improve soil health and structure.',
+                        'effectiveness': '100%',
+                        'timeline': 'Ongoing',
+                        'cost': '$0/acre',
+                        'application': 'Add organic matter and avoid soil compaction'
+                    },
+                    {
+                        'method': 'Soil Enhancement',
+                        'description': 'Add compost and organic matter to encourage earthworm activity.',
+                        'effectiveness': '95%',
+                        'timeline': 'Season-long',
+                        'cost': '$50-75/acre',
+                        'application': 'Apply compost 2-3 times per growing season'
+                    }
+                ],
+                'prevention': [
+                    'Avoid chemical pesticides and fertilizers',
+                    'Maintain soil moisture',
+                    'Add organic compost regularly',
+                    'Minimize soil tillage',
+                    'Keep soil covered with mulch'
+                ]
+            },
+            'earwig': {
+                'severity': 'Medium',
+                'crops_affected': 'Seedlings, soft fruits, flowers',
+                'organic_treatments': [
+                    {
+                        'method': 'Newspaper Traps',
+                        'description': 'Roll up damp newspaper for earwigs to hide in, then dispose.',
+                        'effectiveness': '80%',
+                        'timeline': '1-2 days',
+                        'cost': '$5-10/acre',
+                        'application': 'Place traps in evening, collect and dispose in morning'
+                    },
+                    {
+                        'method': 'Diatomaceous Earth',
+                        'description': 'Apply food-grade diatomaceous earth around plants.',
                         'effectiveness': '85%',
-                        'timeline': '2-3 weeks',
+                        'timeline': '3-5 days',
+                        'cost': '$15-20/acre',
+                        'application': 'Apply in dry conditions, reapply after rain'
+                    },
+                    {
+                        'method': 'Garden Cleanup',
+                        'description': 'Remove garden debris where earwigs hide during day.',
+                        'effectiveness': '70%',
+                        'timeline': 'Immediate',
+                        'cost': '$10/acre (labor)',
+                        'application': 'Regular removal of mulch, boards, and plant debris'
+                    }
+                ],
+                'prevention': [
+                    'Remove hiding places like boards and debris',
+                    'Use copper strips around sensitive plants',
+                    'Plant trap crops away from main garden',
+                    'Encourage ground beetles and birds',
+                    'Keep garden areas well-lit'
+                ]
+            },
+            'grasshopper': {
+                'severity': 'High',
+                'crops_affected': 'Grains, grasses, vegetables, fruits',
+                'organic_treatments': [
+                    {
+                        'method': 'Row Covers',
+                        'description': 'Use floating row covers to protect crops from grasshoppers.',
+                        'effectiveness': '95%',
+                        'timeline': 'Season-long',
+                        'cost': '$200-350/acre',
+                        'application': 'Install before grasshopper migration'
+                    },
+                    {
+                        'method': 'Encourage Predators',
+                        'description': 'Attract birds and spiders with diverse plantings and habitat.',
+                        'effectiveness': '75%',
+                        'timeline': '2-4 weeks',
+                        'cost': '$30-50/acre',
+                        'application': 'Plant native flowers and provide bird nesting sites'
+                    },
+                    {
+                        'method': 'Neem Oil for Young Hoppers',
+                        'description': 'Apply neem oil spray when grasshoppers are young and vulnerable.',
+                        'effectiveness': '70%',
+                        'timeline': '1-2 weeks',
+                        'cost': '$20-25/acre',
+                        'application': 'Apply early morning when grasshoppers are less active'
+                    }
+                ],
+                'prevention': [
+                    'Maintain diverse habitat for natural predators',
+                    'Till soil in fall to destroy egg masses',
+                    'Use trap crops like wheat or barley',
+                    'Keep grass areas mowed short',
+                    'Remove weeds that serve as food sources'
+                ]
+            },
+            'moth': {
+                'severity': 'Medium',
+                'crops_affected': 'Various crops (larvae cause damage)',
+                'organic_treatments': [
+                    {
+                        'method': 'Pheromone Traps',
+                        'description': 'Use species-specific pheromone traps to catch adult moths.',
+                        'effectiveness': '80%',
+                        'timeline': 'Continuous',
+                        'cost': '$25-35/acre',
+                        'application': 'Install before moth flight period, replace lures monthly'
+                    },
+                    {
+                        'method': 'Light Traps',
+                        'description': 'Install light traps away from crops to attract and capture moths.',
+                        'effectiveness': '70%',
+                        'timeline': 'Nightly',
+                        'cost': '$50-75/acre',
+                        'application': 'Operate during peak moth activity periods'
+                    },
+                    {
+                        'method': 'Bt Spray for Larvae',
+                        'description': 'Apply Bt spray when moth larvae are active.',
+                        'effectiveness': '85%',
+                        'timeline': '3-7 days',
+                        'cost': '$25-30/acre',
+                        'application': 'Target young larvae, apply in evening'
+                    }
+                ],
+                'prevention': [
+                    'Monitor with pheromone traps',
+                    'Remove plant debris and weeds',
+                    'Encourage beneficial insects',
+                    'Use companion planting',
+                    'Practice good crop rotation'
+                ]
+            },
+            'slug': {
+                'severity': 'Medium',
+                'crops_affected': 'Leafy greens, seedlings, soft fruits',
+                'organic_treatments': [
+                    {
+                        'method': 'Iron Phosphate Bait',
+                        'description': 'Use organic iron phosphate slug bait around affected plants.',
+                        'effectiveness': '90%',
+                        'timeline': '3-7 days',
+                        'cost': '$20-30/acre',
+                        'application': 'Apply in evening when slugs are active'
+                    },
+                    {
+                        'method': 'Diatomaceous Earth',
+                        'description': 'Apply food-grade diatomaceous earth as a barrier.',
+                        'effectiveness': '75%',
+                        'timeline': '1-3 days',
+                        'cost': '$15-20/acre',
+                        'application': 'Apply in dry conditions around plants'
+                    },
+                    {
+                        'method': 'Beer Traps',
+                        'description': 'Create beer traps to attract and drown slugs.',
+                        'effectiveness': '70%',
+                        'timeline': '1-2 days',
+                        'cost': '$10-15/acre',
+                        'application': 'Bury containers level with soil, replace beer regularly'
+                    }
+                ],
+                'prevention': [
+                    'Remove hiding places like boards and debris',
+                    'Use copper strips as barriers',
+                    'Encourage ground beetles and birds',
+                    'Reduce moisture around plants',
+                    'Hand-pick in evening when active'
+                ]
+            },
+            'snail': {
+                'severity': 'Medium',
+                'crops_affected': 'Leafy greens, seedlings, fruits',
+                'organic_treatments': [
+                    {
+                        'method': 'Hand Picking',
+                        'description': 'Remove snails manually in evening when they are active.',
+                        'effectiveness': '95%',
+                        'timeline': 'Immediate',
+                        'cost': '$10-15/acre (labor)',
+                        'application': 'Daily collection during peak activity'
+                    },
+                    {
+                        'method': 'Copper Strips',
+                        'description': 'Install copper strips around plants as barriers.',
+                        'effectiveness': '85%',
+                        'timeline': 'Season-long',
+                        'cost': '$100-150/acre',
+                        'application': 'Install around bed perimeters and individual plants'
+                    },
+                    {
+                        'method': 'Iron Phosphate Bait',
+                        'description': 'Use organic iron phosphate bait safe for pets and wildlife.',
+                        'effectiveness': '90%',
+                        'timeline': '5-7 days',
+                        'cost': '$20-30/acre',
+                        'application': 'Apply in evening, reapply after rain'
+                    }
+                ],
+                'prevention': [
+                    'Remove hiding places and debris',
+                    'Create dry barriers around plants',
+                    'Encourage natural predators',
+                    'Water plants in morning to reduce evening moisture',
+                    'Use raised beds for better drainage'
+                ]
+            },
+            'wasp': {
+                'severity': 'Beneficial',
+                'crops_affected': 'Various crops (BENEFICIAL PREDATOR)',
+                'organic_treatments': [
+                    {
+                        'method': 'Protection & Encouragement',
+                        'description': '🌟 PROTECT BENEFICIAL WASPS! They control many pest insects.',
+                        'effectiveness': '100%',
+                        'timeline': 'Ongoing',
+                        'cost': '$0/acre',
+                        'application': 'Avoid pesticides and provide flowering plants'
+                    },
+                    {
+                        'method': 'Habitat Enhancement',
+                        'description': 'Plant flowers that provide nectar for beneficial wasps.',
+                        'effectiveness': '90%',
+                        'timeline': 'Season-long',
+                        'cost': '$25-40/acre',
+                        'application': 'Plant diverse flowering species'
+                    }
+                ],
+                'prevention': [
+                    'Only control if near high-traffic areas',
+                    'Provide alternative nesting sites',
+                    'Plant flowers for beneficial species',
+                    'Avoid broad-spectrum pesticides',
+                    'Educate about beneficial vs. pest species'
+                ]
+            },
+            'weevil': {
+                'severity': 'High',
+                'crops_affected': 'Grains, nuts, stored products, root crops',
+                'organic_treatments': [
+                    {
+                        'method': 'Beneficial Nematodes',
+                        'description': 'Apply beneficial nematodes to soil to target weevil larvae.',
+                        'effectiveness': '85%',
+                        'timeline': '2-4 weeks',
                         'cost': '$40-60/acre',
                         'application': 'Apply to moist soil when temperature is 60-85°F'
                     },
                     {
                         'method': 'Diatomaceous Earth',
-                        'description': 'Dust food-grade diatomaceous earth around plants and on foliage.',
+                        'description': 'Apply food-grade diatomaceous earth around affected plants.',
                         'effectiveness': '75%',
                         'timeline': '1-2 weeks',
+                        'cost': '$15-25/acre',
+                        'application': 'Apply in dry conditions, reapply after rain'
+                    },
+                    {
+                        'method': 'Sticky Traps',
+                        'description': 'Use yellow sticky traps to monitor and capture adult weevils.',
+                        'effectiveness': '60%',
+                        'timeline': 'Continuous',
                         'cost': '$15-20/acre',
-                        'application': 'Reapply after rain or heavy dew'
+                        'application': 'Replace traps weekly during peak activity'
                     }
                 ],
                 'prevention': [
-                    'Crop rotation every 2-3 years',
-                    'Plant trap crops like radishes',
-                    'Use row covers during vulnerable growth stages',
-                    'Deep cultivation in fall to expose overwintering beetles',
-                    'Encourage ground beetles and spiders'
-                ]
-            },
-            'Whitefly': {
-                'severity': 'High',
-                'crops_affected': 'Tomatoes, peppers, cabbage, squash',
-                'organic_treatments': [
-                    {
-                        'method': 'Yellow Sticky Traps',
-                        'description': 'Place yellow sticky traps around plants to monitor and catch adult whiteflies.',
-                        'effectiveness': '60%',
-                        'timeline': 'Continuous',
-                        'cost': '$10-15/acre',
-                        'application': 'Replace traps weekly or when full'
-                    },
-                    {
-                        'method': 'Reflective Mulch',
-                        'description': 'Use silver reflective mulch to disorient and repel whiteflies.',
-                        'effectiveness': '70%',
-                        'timeline': 'Season-long',
-                        'cost': '$50-75/acre',
-                        'application': 'Install before planting or transplanting'
-                    },
-                    {
-                        'method': 'Parasitic Wasp Release',
-                        'description': 'Release Encarsia formosa or Eretmocerus species for biological control.',
-                        'effectiveness': '85%',
-                        'timeline': '3-4 weeks',
-                        'cost': '$60-80/acre',
-                        'application': 'Release when whitefly population is detected'
-                    }
-                ],
-                'prevention': [
-                    'Remove plant debris and weeds',
-                    'Use companion planting with basil or marigolds',
-                    'Maintain proper plant spacing for air circulation',
-                    'Regular inspection of undersides of leaves',
-                    'Avoid excessive nitrogen fertilization'
-                ]
-            },
-            'Thrips': {
-                'severity': 'Medium',
-                'crops_affected': 'Onions, tomatoes, peppers, flowers',
-                'organic_treatments': [
-                    {
-                        'method': 'Blue Sticky Traps',
-                        'description': 'Use blue sticky traps to monitor and capture adult thrips.',
-                        'effectiveness': '65%',
-                        'timeline': 'Continuous',
-                        'cost': '$12-18/acre',
-                        'application': 'Place traps at plant height, replace weekly'
-                    },
-                    {
-                        'method': 'Predatory Mites',
-                        'description': 'Release predatory mites like Amblyseius species for biological control.',
-                        'effectiveness': '80%',
-                        'timeline': '2-3 weeks',
-                        'cost': '$45-65/acre',
-                        'application': 'Release during mild weather conditions'
-                    },
-                    {
-                        'method': 'Spinosad Spray',
-                        'description': 'Apply organic spinosad-based insecticide for severe infestations.',
-                        'effectiveness': '85%',
-                        'timeline': '3-5 days',
-                        'cost': '$25-35/acre',
-                        'application': 'Spray in evening to protect beneficial insects'
-                    }
-                ],
-                'prevention': [
-                    'Remove weeds and plant debris',
-                    'Use reflective mulches',
-                    'Maintain adequate soil moisture',
-                    'Plant resistant varieties when available',
-                    'Encourage natural predators like minute pirate bugs'
-                ]
-            },
-            'Mites': {
-                'severity': 'High',
-                'crops_affected': 'Strawberries, beans, corn, ornamentals',
-                'organic_treatments': [
-                    {
-                        'method': 'Horticultural Oil Spray',
-                        'description': 'Apply horticultural oil to smother mites and eggs.',
-                        'effectiveness': '75%',
-                        'timeline': '3-7 days',
-                        'cost': '$18-25/acre',
-                        'application': 'Spray during cooler parts of the day'
-                    },
-                    {
-                        'method': 'Predatory Mite Release',
-                        'description': 'Release Phytoseiulus persimilis or other predatory mites.',
-                        'effectiveness': '90%',
-                        'timeline': '2-4 weeks',
-                        'cost': '$50-70/acre',
-                        'application': 'Release when pest mites are first detected'
-                    },
-                    {
-                        'method': 'Strong Water Spray',
-                        'description': 'Use strong water spray to dislodge mites from plants.',
-                        'effectiveness': '60%',
-                        'timeline': 'Immediate',
-                        'cost': '$5/acre (water)',
-                        'application': 'Daily spraying for 1-2 weeks'
-                    }
-                ],
-                'prevention': [
-                    'Maintain adequate humidity levels',
-                    'Avoid water stress in plants',
-                    'Regular inspection with magnifying glass',
-                    'Remove heavily infested leaves',
-                    'Encourage beneficial insects with diverse plantings'
+                    'Crop rotation with non-host plants',
+                    'Remove plant debris after harvest',
+                    'Deep cultivation to expose larvae',
+                    'Use resistant plant varieties',
+                    'Monitor with pheromone traps'
                 ]
             }
         }
@@ -333,7 +639,7 @@ class OrganicTreatmentDatabase:
         }
 
 # Initialize global objects
-pest_model = SimplePestClassifier()
+pest_model = PestClassifier()
 treatment_db = OrganicTreatmentDatabase()
 
 def init_database():

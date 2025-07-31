@@ -22,90 +22,94 @@ logger = logging.getLogger(__name__)
 class PestClassifierTrainer:
     """Class for training pest classification model"""
     
-    def __init__(self, data_dir='pest_dataset', model_save_path='models/pest_classifier.h5'):
+    def __init__(self, data_dir='dataset', model_save_path='models/pest_classifier.h5'):
         self.data_dir = data_dir
         self.model_save_path = model_save_path
         self.model = None
         self.history = None
         
+        # Set up training and test directories
+        self.train_dir = os.path.join(data_dir, 'train') if os.path.exists(os.path.join(data_dir, 'train')) else data_dir
+        self.test_dir = os.path.join(data_dir, 'test') if os.path.exists(os.path.join(data_dir, 'test')) else None
+        
         # Create models directory if it doesn't exist
         os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
         
     def create_model(self):
-        """Create CNN model architecture"""
+        """Create CNN model architecture - following main.py approach"""
         model = models.Sequential([
-            # First convolutional block
-            layers.Conv2D(32, (3, 3), activation='relu', 
-                         input_shape=MODEL_CONFIG['input_shape']),
+            # Input layer
+            layers.Input(shape=MODEL_CONFIG['input_shape']),
+            
+            # First Conv Block (double conv like main.py)
+            layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
             layers.BatchNormalization(),
+            layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.25),
             
-            # Second convolutional block
-            layers.Conv2D(64, (3, 3), activation='relu'),
+            # Second Conv Block (double conv like main.py)
+            layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
             layers.BatchNormalization(),
+            layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.25),
             
-            # Third convolutional block
-            layers.Conv2D(128, (3, 3), activation='relu'),
+            # Third Conv Block (double conv like main.py)
+            layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
             layers.BatchNormalization(),
+            layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.25),
             
-            # Fourth convolutional block
-            layers.Conv2D(256, (3, 3), activation='relu'),
+            # Fourth Conv Block (double conv like main.py)
+            layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
             layers.BatchNormalization(),
+            layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.25),
             
-            # Flatten and dense layers
+            # Dense layers (following main.py pattern)
             layers.Flatten(),
             layers.Dense(512, activation='relu'),
             layers.BatchNormalization(),
             layers.Dropout(0.5),
             layers.Dense(256, activation='relu'),
-            layers.BatchNormalization(),
-            layers.Dropout(0.5),
+            layers.Dropout(0.3),  # Different dropout like main.py
             
             # Output layer
             layers.Dense(MODEL_CONFIG['num_classes'], activation='softmax')
         ])
         
-        # Compile model
+        # Compile model (simplified like main.py - no top_3_accuracy)
         model.compile(
             optimizer=optimizers.Adam(learning_rate=MODEL_CONFIG['learning_rate']),
             loss='categorical_crossentropy',
-            metrics=['accuracy', 'top_3_accuracy']
+            metrics=['accuracy']  # Simplified metrics like main.py
         )
         
         self.model = model
         return model
     
     def prepare_data_generators(self):
-        """Prepare data generators for training and validation"""
-        # Training data augmentation
+        """Prepare data generators for training and validation - simplified like main.py"""
+        # Training data augmentation (simplified like main.py)
         train_datagen = ImageDataGenerator(
-            rescale=IMAGE_PREPROCESSING['rescale'],
-            rotation_range=IMAGE_PREPROCESSING['rotation_range'],
-            width_shift_range=IMAGE_PREPROCESSING['width_shift_range'],
-            height_shift_range=IMAGE_PREPROCESSING['height_shift_range'],
-            horizontal_flip=IMAGE_PREPROCESSING['horizontal_flip'],
-            vertical_flip=IMAGE_PREPROCESSING['vertical_flip'],
-            zoom_range=IMAGE_PREPROCESSING['zoom_range'],
-            fill_mode=IMAGE_PREPROCESSING['fill_mode'],
+            rescale=1./255,
+            rotation_range=20,
+            horizontal_flip=True,
             validation_split=MODEL_CONFIG['validation_split']
         )
         
         # Validation data (no augmentation)
         validation_datagen = ImageDataGenerator(
-            rescale=IMAGE_PREPROCESSING['rescale'],
+            rescale=1./255,
             validation_split=MODEL_CONFIG['validation_split']
         )
         
-        # Create generators
+        # Create generators using the training directory
         train_generator = train_datagen.flow_from_directory(
-            self.data_dir,
+            self.train_dir,
             target_size=IMAGE_PREPROCESSING['target_size'],
             batch_size=MODEL_CONFIG['batch_size'],
             class_mode='categorical',
@@ -115,7 +119,7 @@ class PestClassifierTrainer:
         )
         
         validation_generator = validation_datagen.flow_from_directory(
-            self.data_dir,
+            self.train_dir,
             target_size=IMAGE_PREPROCESSING['target_size'],
             batch_size=MODEL_CONFIG['batch_size'],
             class_mode='categorical',
@@ -166,15 +170,28 @@ class PestClassifierTrainer:
         logger.info("Starting model training...")
         
         # Check if data directory exists
-        if not os.path.exists(self.data_dir):
-            logger.error(f"Data directory {self.data_dir} not found!")
-            logger.info("Please organize your pest images in the following structure:")
-            logger.info(f"{self.data_dir}/")
+        if not os.path.exists(self.train_dir):
+            logger.error(f"Training data directory {self.train_dir} not found!")
+            logger.info("Please organize your pest images in one of the following structures:")
+            logger.info("Option 1 - Single directory with train/validation split:")
+            logger.info(f"dataset/")
             for pest_class in PEST_CLASSES:
                 logger.info(f"  {pest_class}/")
                 logger.info(f"    image1.jpg")
                 logger.info(f"    image2.jpg")
                 logger.info(f"    ...")
+            logger.info("\nOption 2 - Separate train/test directories:")
+            logger.info(f"dataset/")
+            logger.info(f"  train/")
+            for pest_class in PEST_CLASSES:
+                logger.info(f"    {pest_class}/")
+                logger.info(f"      image1.jpg")
+                logger.info(f"      ...")
+            logger.info(f"  test/")
+            for pest_class in PEST_CLASSES:
+                logger.info(f"    {pest_class}/")
+                logger.info(f"      image1.jpg")
+                logger.info(f"      ...")
             return None
         
         # Create model
@@ -207,11 +224,16 @@ class PestClassifierTrainer:
             logger.error("No model to evaluate. Train model first.")
             return None
         
-        if test_data_dir and os.path.exists(test_data_dir):
+        # Determine test directory to use
+        test_dir_to_use = test_data_dir or self.test_dir
+        
+        if test_dir_to_use and os.path.exists(test_dir_to_use):
+            logger.info(f"Evaluating model on test data from: {test_dir_to_use}")
+            
             # Use separate test directory
             test_datagen = ImageDataGenerator(rescale=1.0/255.0)
             test_generator = test_datagen.flow_from_directory(
-                test_data_dir,
+                test_dir_to_use,
                 target_size=IMAGE_PREPROCESSING['target_size'],
                 batch_size=1,
                 class_mode='categorical',
@@ -247,6 +269,7 @@ class PestClassifierTrainer:
             }
         else:
             logger.warning("No test data directory provided or found.")
+            logger.info("Model evaluation will be based on validation data from training.")
             return None
     
     def plot_training_history(self):
@@ -303,21 +326,27 @@ class PestClassifierTrainer:
         """Create a sample dataset structure for demonstration"""
         logger.info("Creating sample dataset structure...")
         
-        for pest_class in PEST_CLASSES:
-            class_dir = os.path.join(self.data_dir, pest_class)
-            os.makedirs(class_dir, exist_ok=True)
-            
-            # Create a dummy image file for each class
-            dummy_image = np.random.randint(0, 255, 
-                                          (224, 224, 3), 
-                                          dtype=np.uint8)
-            
-            # Save using PIL
-            from PIL import Image
-            img = Image.fromarray(dummy_image)
-            img.save(os.path.join(class_dir, f'sample_{pest_class.lower()}.jpg'))
+        # Create both train and test directories
+        for split in ['train', 'test']:
+            split_dir = os.path.join(self.data_dir, split)
+            for pest_class in PEST_CLASSES:
+                class_dir = os.path.join(split_dir, pest_class)
+                os.makedirs(class_dir, exist_ok=True)
+                
+                # Create a dummy image file for each class
+                dummy_image = np.random.randint(0, 255, 
+                                              (224, 224, 3), 
+                                              dtype=np.uint8)
+                
+                # Save using PIL
+                from PIL import Image
+                img = Image.fromarray(dummy_image)
+                img.save(os.path.join(class_dir, f'sample_{pest_class.lower()}_{split}.jpg'))
         
         logger.info(f"Sample dataset created in {self.data_dir}")
+        logger.info("Dataset structure:")
+        logger.info(f"  {self.data_dir}/train/ - Training images")
+        logger.info(f"  {self.data_dir}/test/  - Test images")
         logger.info("Replace sample images with real pest images for actual training.")
 
 def main():
@@ -325,12 +354,27 @@ def main():
     # Create trainer instance
     trainer = PestClassifierTrainer()
     
-    # Create sample dataset if needed
+    # Check dataset structure
     if not os.path.exists(trainer.data_dir):
         logger.info("No dataset found. Creating sample dataset structure...")
         trainer.create_sample_dataset()
         logger.info("Please replace sample images with real pest images before training.")
         return
+    
+    # Check if we have training data
+    if not os.path.exists(trainer.train_dir):
+        logger.info("No training data found. Creating sample dataset structure...")
+        trainer.create_sample_dataset()
+        logger.info("Please replace sample images with real pest images before training.")
+        return
+    
+    # Log dataset information
+    logger.info(f"Using dataset directory: {trainer.data_dir}")
+    logger.info(f"Training data directory: {trainer.train_dir}")
+    if trainer.test_dir:
+        logger.info(f"Test data directory: {trainer.test_dir}")
+    else:
+        logger.info("No separate test directory found. Will use validation split from training data.")
     
     # Train model
     history = trainer.train_model()
