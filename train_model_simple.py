@@ -15,6 +15,38 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def setup_gpu():
+    """Setup and configure GPU if available"""
+    try:
+        # List available GPUs
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        
+        if gpus:
+            logger.info(f"🚀 Found {len(gpus)} GPU(s): {[gpu.name for gpu in gpus]}")
+            
+            # Enable memory growth to prevent TensorFlow from allocating all GPU memory
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            
+            # Set the first GPU as the default
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+            
+            # Verify GPU is being used
+            with tf.device('/GPU:0'):
+                test_tensor = tf.constant([[1.0]])
+                logger.info("✅ GPU setup successful - TensorFlow will use GPU for training")
+                
+            return True
+            
+        else:
+            logger.warning("⚠️ No GPU found - training will use CPU (this will be slower)")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ GPU setup failed: {e}")
+        logger.info("🔄 Falling back to CPU training")
+        return False
+
 class SimplePestClassifier:
     """Simple pest classifier following main.py approach"""
     
@@ -25,6 +57,13 @@ class SimplePestClassifier:
         from config import PEST_CLASSES
         self.class_names = PEST_CLASSES
         self.model = None
+        
+        # Setup GPU if available
+        self.gpu_available = setup_gpu()
+        if self.gpu_available:
+            logger.info("🎯 Training will be accelerated with GPU")
+        else:
+            logger.info("🐌 Training will use CPU (consider using GPU for faster training)")
         
         # Create models directory
         os.makedirs('models', exist_ok=True)
@@ -136,9 +175,28 @@ class SimplePestClassifier:
         return self.model
     
     def train_model(self, epochs=20):
-        """Train model following main.py approach"""
+        """Train model following main.py approach with GPU optimizations"""
         
         logger.info(f"🚀 Training model for {epochs} epochs...")
+        
+        # GPU-specific optimizations
+        if self.gpu_available:
+            logger.info("⚡ Applying GPU optimizations...")
+            
+            # Enable mixed precision for faster training on modern GPUs
+            try:
+                policy = tf.keras.mixed_precision.Policy('mixed_float16')
+                tf.keras.mixed_precision.set_global_policy(policy)
+                logger.info("✅ Mixed precision enabled (faster training on compatible GPUs)")
+            except Exception as e:
+                logger.warning(f"⚠️ Mixed precision not available: {e}")
+            
+            # Set optimal batch size for GPU
+            if hasattr(self, 'train_ds'):
+                # Prefetch for better GPU utilization
+                self.train_ds = self.train_ds.prefetch(tf.data.AUTOTUNE)
+                self.val_ds = self.val_ds.prefetch(tf.data.AUTOTUNE)
+                logger.info("📊 Dataset optimized for GPU with prefetching")
         
         # Simple callbacks (following main.py pattern)
         callbacks = [
@@ -162,25 +220,67 @@ class SimplePestClassifier:
             )
         ]
         
-        # Train
-        history = self.model.fit(
-            self.train_ds,
-            validation_data=self.val_ds,
-            epochs=epochs,
-            callbacks=callbacks,
-            verbose=1
-        )
+        # Add GPU memory monitoring callback if GPU is available
+        if self.gpu_available:
+            class GPUMemoryCallback(keras.callbacks.Callback):
+                def on_epoch_end(self, epoch, logs=None):
+                    try:
+                        # Get GPU memory info
+                        gpu_info = tf.config.experimental.get_memory_info('GPU:0')
+                        used_mb = gpu_info['current'] // (1024 * 1024)
+                        peak_mb = gpu_info['peak'] // (1024 * 1024)
+                        logger.info(f"🖥️ GPU Memory - Used: {used_mb}MB, Peak: {peak_mb}MB")
+                    except:
+                        pass  # Skip if memory info not available
+            
+            callbacks.append(GPUMemoryCallback())
+        
+        # Train with device placement
+        device_name = '/GPU:0' if self.gpu_available else '/CPU:0'
+        logger.info(f"🎯 Training on device: {device_name}")
+        
+        with tf.device(device_name):
+            # Train
+            history = self.model.fit(
+                self.train_ds,
+                validation_data=self.val_ds,
+                epochs=epochs,
+                callbacks=callbacks,
+                verbose=1
+            )
         
         # Save final model
         self.model.save('models/pest_classifier.h5')
         logger.info("✅ Model saved as 'models/pest_classifier.h5'")
+        
+        # Print training summary
+        if self.gpu_available:
+            logger.info("🚀 Training completed with GPU acceleration!")
+        else:
+            logger.info("🏁 Training completed on CPU")
         
         return history
 
 def main():
     """Main training function following main.py pattern"""
     
-    logger.info("🚀 Simple CNN Training (following main.py approach)")
+    logger.info("🌱 Starting Organic Pest Classification Model Training")
+    logger.info("=" * 60)
+    
+    # Display system information
+    logger.info(f"🔧 TensorFlow version: {tf.__version__}")
+    
+    # Check for GPU availability upfront
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        logger.info(f"🚀 GPU acceleration available: {len(gpus)} GPU(s) detected")
+        for i, gpu in enumerate(gpus):
+            logger.info(f"   GPU {i}: {gpu.name}")
+    else:
+        logger.info("💻 No GPU detected - training will use CPU")
+        logger.info("   Consider using a GPU for faster training (NVIDIA GTX/RTX series)")
+    
+    logger.info("=" * 60)
     
     # Check if dataset exists
     if not os.path.exists('dataset'):
@@ -202,7 +302,7 @@ def main():
         logger.info("  └── weevil/")
         return
     
-    # Initialize classifier
+    # Initialize classifier (this will setup GPU)
     classifier = SimplePestClassifier(data_dir='dataset')
     
     # Prepare data
@@ -216,6 +316,13 @@ def main():
     
     logger.info("✅ Training completed successfully!")
     logger.info("📁 Model saved to: models/pest_classifier.h5")
+    
+    # Final GPU summary
+    if classifier.gpu_available:
+        logger.info("🚀 Training used GPU acceleration for optimal performance!")
+    else:
+        logger.info("💻 Training completed on CPU")
+        logger.info("   Tip: Use a dedicated GPU for much faster training in the future")
 
 if __name__ == "__main__":
     main()
