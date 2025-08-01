@@ -4,12 +4,16 @@ This script trains a CNN model for pest identification using the same approach a
 """
 
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import logging
+
+# Add parent directory to path for config import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +54,7 @@ def setup_gpu():
 class SimplePestClassifier:
     """Simple pest classifier following main.py approach"""
     
-    def __init__(self, data_dir='dataset', img_size=(224, 224)):
+    def __init__(self, data_dir='../dataset', img_size=(224, 224)):
         self.data_dir = data_dir
         self.img_size = img_size
         # Using your existing pest classes from config
@@ -66,7 +70,7 @@ class SimplePestClassifier:
             logger.info("🐌 Training will use CPU (consider using GPU for faster training)")
         
         # Create models directory
-        os.makedirs('models', exist_ok=True)
+        os.makedirs('../models', exist_ok=True)
     
     def prepare_data(self, batch_size=32):
         """Simple data preparation following main.py approach"""
@@ -213,7 +217,7 @@ class SimplePestClassifier:
                 verbose=1
             ),
             keras.callbacks.ModelCheckpoint(
-                'models/pest_classifier.h5',
+                '../models/pest_classifier.h5',
                 save_best_only=True,
                 monitor='val_accuracy',
                 verbose=1
@@ -250,8 +254,8 @@ class SimplePestClassifier:
             )
         
         # Save final model
-        self.model.save('models/pest_classifier.h5')
-        logger.info("✅ Model saved as 'models/pest_classifier.h5'")
+        self.model.save('../models/pest_classifier.h5')
+        logger.info("✅ Model saved as '../models/pest_classifier.h5'")
         
         # Print training summary
         if self.gpu_available:
@@ -283,11 +287,11 @@ def main():
     logger.info("=" * 60)
     
     # Check if dataset exists
-    if not os.path.exists('dataset'):
+    if not os.path.exists('../dataset'):
         logger.error("❌ Dataset directory not found!")
-        logger.info("Please ensure your dataset is in the 'dataset' directory")
+        logger.info("Please ensure your dataset is in the '../dataset' directory")
         logger.info("Expected structure:")
-        logger.info("dataset/")
+        logger.info("../dataset/")
         logger.info("  ├── ants/")
         logger.info("  ├── bees/")
         logger.info("  ├── beetle/")
@@ -303,7 +307,7 @@ def main():
         return
     
     # Initialize classifier (this will setup GPU)
-    classifier = SimplePestClassifier(data_dir='dataset')
+    classifier = SimplePestClassifier(data_dir='../dataset')
     
     # Prepare data
     train_ds, val_ds = classifier.prepare_data()
@@ -315,7 +319,7 @@ def main():
     history = classifier.train_model(epochs=20)
     
     logger.info("✅ Training completed successfully!")
-    logger.info("📁 Model saved to: models/pest_classifier.h5")
+    logger.info("📁 Model saved to: ../models/pest_classifier.h5")
     
     # Final GPU summary
     if classifier.gpu_available:

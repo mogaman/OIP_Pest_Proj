@@ -1,76 +1,140 @@
 """
-OrganicGuard AI - Simplified Demo Version
-A Flask-based web application for organic pest management consultation
+Simple Pest AI - Image Analysis & Chat
+A streamlined Flask app for pest identification and consultation
 """
 
 import os
 import io
-import json
 import base64
-import sqlite3
 from datetime import datetime
 from PIL import Image
 import numpy as np
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, flash
 from werkzeug.utils import secure_filename
 import random
 import logging
-
-# Import TensorFlow for model loading
-try:
-    import tensorflow as tf
-    TENSORFLOW_AVAILABLE = True
-except ImportError:
-    TENSORFLOW_AVAILABLE = False
-    print("⚠️ TensorFlow not available - using demo classifier")
-
-# Import config for pest classes
-from config import PEST_CLASSES
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Try to import TensorFlow for real AI model
+try:
+    import tensorflow as tf
+    from config import PEST_CLASSES
+    TF_AVAILABLE = True
+    logger.info("✅ TensorFlow available - will use trained AI model if available")
+except ImportError:
+    TF_AVAILABLE = False
+    logger.warning("⚠️ TensorFlow not available - using demo mode")
+
 app = Flask(__name__)
-app.secret_key = 'organic_pest_management_secret_key_2024'
+app.secret_key = 'simple_pest_ai_2024'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('models', exist_ok=True)
-os.makedirs('data', exist_ok=True)
 
-class PestClassifier:
-    """Real pest classifier using trained model"""
+class SmartPestClassifier:
+    """Intelligent pest classifier that uses trained AI model or falls back to demo"""
     
     def __init__(self):
-        self.class_names = PEST_CLASSES
-        self.confidence_threshold = 0.6
         self.model = None
-        self.model_path = 'models/pest_classifier.h5'
+        self.demo_mode = True
+        self.confidence_threshold = 60  # Changed to percentage (0-100) for consistency
         
-        # Try to load trained model
-        self.load_model()
+        logger.info("🚀 Initializing SmartPestClassifier...")
         
-    def load_model(self):
-        """Load the trained model if available"""
-        try:
-            if TENSORFLOW_AVAILABLE and os.path.exists(self.model_path):
-                self.model = tf.keras.models.load_model(self.model_path)
-                logger.info(f"✅ Loaded trained model from {self.model_path}")
+        # Try to load trained model first - check multiple possible model files
+        model_paths = [
+            'models/pest_classifier.h5',                    # From training scripts
+            'models/custom_pest_model.h5',                  # From wm_cnn.py
+            'models/efficientnet_pest_final.h5',            # From EfficientNet training
+            'models/convnext_pest_classifier.h5',           # From ConvNeXt training
+            'models/pest_classifier_mobilenetv2.h5'         # Legacy path
+        ]
+        
+        model_loaded = False
+        if TF_AVAILABLE:
+            for model_path in model_paths:
+                if os.path.exists(model_path):
+                    try:
+                        logger.info(f"🤖 Loading trained AI model from {model_path}...")
+                        self.model = tf.keras.models.load_model(model_path)
+                        self.class_names = PEST_CLASSES  # Use config classes
+                        self.demo_mode = False
+                        model_loaded = True
+                        logger.info("✅ Trained AI model loaded successfully!")
+                        logger.info(f"🎯 Model can identify: {', '.join(self.class_names)}")
+                        logger.info(f"📁 Using model: {model_path}")
+                        break
+                    except Exception as e:
+                        logger.error(f"❌ Failed to load model {model_path}: {e}")
+                        continue
+        
+        if not model_loaded:
+            if not TF_AVAILABLE:
+                logger.info("📝 TensorFlow not available - using demo mode")
             else:
-                if not TENSORFLOW_AVAILABLE:
-                    logger.warning("⚠️ TensorFlow not available - using demo mode")
-                else:
-                    logger.warning(f"⚠️ No trained model found at {self.model_path} - using demo mode")
-                self.model = None
-        except Exception as e:
-            logger.error(f"❌ Error loading model: {e}")
-            self.model = None
+                logger.info("📝 No trained model found - using demo mode")
+                logger.info("💡 Train a model using the training_scripts to get real predictions")
+            self._setup_demo_mode()
     
+    def _setup_demo_mode(self):
+        """Setup demo mode with fallback pest classes"""
+        self.demo_mode = True
+        self.class_names = [
+            'ants', 'bees', 'beetle', 'catterpillar', 'earthworms', 'earwig',
+            'grasshopper', 'moth', 'slug', 'snail', 'wasp', 'weevil'
+        ]
+        logger.info("🎭 Demo mode active - predictions will be simulated")
+    
+    def _check_image_quality(self, image):
+        """Check if image quality is sufficient for analysis"""
+        try:
+            # Convert to numpy array for analysis
+            img_array = np.array(image)
+            
+            # Check image size
+            if image.size[0] < 100 or image.size[1] < 100:
+                return False, "Image too small (minimum 100x100 pixels)"
+            
+            # Check brightness
+            if len(img_array.shape) == 3:
+                brightness = np.mean(img_array)
+                if brightness < 30:
+                    return False, "Image too dark"
+                elif brightness > 240:
+                    return False, "Image overexposed"
+            
+            # Check for blur (simple variance of Laplacian)
+            gray = np.mean(img_array, axis=2) if len(img_array.shape) == 3 else img_array
+            laplacian_var = np.var(np.gradient(gray))
+            if laplacian_var < 100:
+                return False, "Image too blurry"
+            
+            # Check contrast
+            if len(img_array.shape) == 3:
+                contrast = np.std(img_array)
+                if contrast < 20:
+                    return False, "Image has low contrast"
+            
+            # Check color range
+            if len(img_array.shape) == 3:
+                color_range = np.max(img_array) - np.min(img_array)
+                if color_range < 50:
+                    return False, "Limited color range in image"
+            
+            return True, "Image quality acceptable"
+            
+        except Exception as e:
+            logger.error(f"Error checking image quality: {e}")
+            return False, f"Error analyzing image: {str(e)}"
+        
     def predict(self, image):
-        """Predict pest type from image"""
+        """Predict pest type using trained model or demo logic"""
         try:
             if isinstance(image, str):
                 # If image is base64 string
@@ -81,11 +145,22 @@ class PestClassifier:
             if image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            # Use real model if available
-            if self.model is not None:
-                return self._predict_with_model(image)
+            # Check image quality first
+            quality_ok, quality_msg = self._check_image_quality(image)
+            if not quality_ok:
+                return {
+                    'pest_name': 'Image Quality Issue',
+                    'confidence': 0,
+                    'prediction_success': False,
+                    'error': f"Image not clear enough: {quality_msg}"
+                }
+            
+            if not self.demo_mode and self.model is not None:
+                # Use trained AI model
+                return self._predict_with_ai(image)
             else:
-                return self._predict_demo_mode(image)
+                # Use demo prediction
+                return self._predict_demo(image)
                 
         except Exception as e:
             logger.error(f"Prediction error: {e}")
@@ -96,792 +171,289 @@ class PestClassifier:
                 'error': str(e)
             }
     
-    def _predict_with_model(self, image):
-        """Real prediction using trained model"""
+    def _predict_with_ai(self, image):
+        """Use trained AI model for prediction"""
         try:
+            # Determine the expected input size based on model
+            # Most training scripts use 224x224, but wm_cnn.py uses 160x160
+            input_shape = self.model.input_shape[1:3] if self.model.input_shape else (224, 224)
+            logger.info(f"🔍 Model expects input size: {input_shape}")
+            
             # Preprocess image for model
-            img_array = np.array(image.resize((224, 224))) / 255.0
-            img_array = np.expand_dims(img_array, axis=0)
+            img_array = np.array(image.resize(input_shape))
+            img_array = img_array / 255.0  # Normalize to [0,1]
+            img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
             
-            # Get predictions
+            logger.info(f"📊 Input shape: {img_array.shape}")
+            
+            # Make prediction
             predictions = self.model.predict(img_array, verbose=0)
-            predicted_class = np.argmax(predictions[0])
-            confidence = float(predictions[0][predicted_class])
+            logger.info(f"🔍 Raw predictions shape: {predictions.shape}")
+            logger.info(f"🔍 Raw predictions: {predictions[0][:5]}...")  # Show first 5 values
             
-            pest_name = self.class_names[predicted_class]
+            # Get results
+            predicted_class_idx = np.argmax(predictions[0])
+            confidence = float(predictions[0][predicted_class_idx])
             
-            # Create all predictions dictionary
+            # Ensure class index is valid
+            if predicted_class_idx >= len(self.class_names):
+                logger.error(f"❌ Invalid class index {predicted_class_idx}, max is {len(self.class_names)-1}")
+                return self._predict_demo(image)
+            
+            pest_name = self.class_names[predicted_class_idx]
+            
+            # Create detailed predictions for all classes
             all_predictions = {}
             for i, class_name in enumerate(self.class_names):
-                all_predictions[class_name] = float(predictions[0][i] * 100)
+                if i < len(predictions[0]):
+                    all_predictions[class_name] = float(predictions[0][i]) * 100
+                else:
+                    all_predictions[class_name] = 0.0
+            
+            logger.info(f"🤖 AI Prediction: {pest_name} ({confidence*100:.1f}%)")
+            logger.info(f"🎯 Class index: {predicted_class_idx}/{len(self.class_names)}")
             
             return {
                 'pest_name': pest_name,
                 'confidence': confidence * 100,
-                'prediction_success': confidence >= self.confidence_threshold,
+                'prediction_success': confidence >= (self.confidence_threshold / 100),  # Convert threshold to 0-1 range
                 'all_predictions': all_predictions,
-                'model_used': 'trained_model'
+                'model_type': 'AI'
             }
             
         except Exception as e:
-            logger.error(f"Model prediction error: {e}")
-            return self._predict_demo_mode(image)
+            logger.error(f"AI prediction failed: {e}")
+            logger.error(f"Model shape: {self.model.input_shape if self.model else 'No model'}")
+            # Fall back to demo mode
+            return self._predict_demo(image)
     
-    def _predict_demo_mode(self, image):
-        """Fallback demo prediction when model not available"""
-        logger.info("🔄 Using demo mode - train a model for real predictions")
-        
-        # Simple color-based classification for demo
-        img_array = np.array(image.resize((224, 224)))
-        
-        # Calculate average color values
-        avg_red = np.mean(img_array[:, :, 0])
-        avg_green = np.mean(img_array[:, :, 1])
-        avg_blue = np.mean(img_array[:, :, 2])
-        
-        # Simple heuristic classification based on dominant colors
-        if avg_green > avg_red and avg_green > avg_blue:
-            # Green dominant - likely plant with ants
-            pest_index = 0  # ants
-            confidence = 0.85 + random.uniform(-0.15, 0.10)
-        elif avg_red > avg_green and avg_red > avg_blue:
-            # Red dominant - might be beetle
-            pest_index = 2  # beetle
-            confidence = 0.78 + random.uniform(-0.10, 0.15)
-        elif avg_blue > avg_red and avg_blue > avg_green:
-            # Blue dominant - unusual, default to moth
-            pest_index = 8  # moth
-            confidence = 0.72 + random.uniform(-0.12, 0.18)
-        else:
-            # Mixed colors - random selection
-            pest_index = random.choice([3, 6, 9])  # catterpillar, earwig, slug
-            confidence = 0.75 + random.uniform(-0.20, 0.20)
-        
-        # Ensure confidence is within bounds
-        confidence = max(0.5, min(0.95, confidence))
-        
-        pest_name = self.class_names[pest_index]
-        
-        return {
-            'pest_name': pest_name,
-            'confidence': confidence * 100,
-            'prediction_success': confidence >= self.confidence_threshold,
-            'all_predictions': {
-                name: random.uniform(5, 95) if name == pest_name else random.uniform(1, 30)
-                for name in self.class_names
-            },
-            'model_used': 'demo_mode'
-        }
+    def _predict_demo(self, image):
+        """Improved demo prediction with better heuristics"""
+        try:
+            # Resize image for analysis
+            img_array = np.array(image.resize((224, 224)))
+            
+            # Calculate color statistics
+            avg_red = np.mean(img_array[:, :, 0])
+            avg_green = np.mean(img_array[:, :, 1])
+            avg_blue = np.mean(img_array[:, :, 2])
+            
+            # Calculate texture features
+            gray = np.mean(img_array, axis=2)
+            brightness = np.mean(gray)
+            contrast = np.std(gray)
+            
+            # More sophisticated classification based on multiple features
+            features = {
+                'green_dominant': avg_green > max(avg_red, avg_blue) + 10,
+                'brown_tones': (avg_red > avg_blue + 20) and (avg_green > avg_blue + 15),
+                'dark_overall': brightness < 100,
+                'high_contrast': contrast > 50,
+                'red_spots': np.max(img_array[:, :, 0]) - avg_red > 50
+            }
+            
+            # Classification logic based on visual features
+            if features['green_dominant'] and features['high_contrast']:
+                # Likely on plant, could be leaf-eating pests
+                candidates = ['catterpillar', 'slug', 'snail', 'beetle']
+                base_confidence = 0.75
+            elif features['brown_tones'] and not features['dark_overall']:
+                # Brown/earthy colors
+                candidates = ['beetle', 'weevil', 'earwig', 'ants']
+                base_confidence = 0.70
+            elif features['dark_overall']:
+                # Dark insects
+                candidates = ['beetle', 'earwig', 'ants']
+                base_confidence = 0.65
+            elif features['red_spots']:
+                # Colorful insects
+                candidates = ['bees', 'wasp', 'beetle']
+                base_confidence = 0.68
+            else:
+                # Mixed/unclear
+                candidates = ['moth', 'grasshopper', 'wasp', 'ants']
+                base_confidence = 0.60
+            
+            # Select most likely candidate
+            pest_name = random.choice(candidates)
+            
+            # Add some variation but keep it reasonable
+            confidence = base_confidence + random.uniform(-0.1, 0.15)
+            confidence = max(0.5, min(0.9, confidence))  # Keep within bounds
+            
+            # Create more realistic prediction distribution
+            all_predictions = {}
+            remaining_confidence = 1.0 - confidence
+            
+            for name in self.class_names:
+                if name == pest_name:
+                    all_predictions[name] = confidence * 100
+                elif name in candidates:
+                    # Other candidates get higher scores
+                    all_predictions[name] = random.uniform(0.05, 0.25) * remaining_confidence * 100
+                else:
+                    # Non-candidates get lower scores
+                    all_predictions[name] = random.uniform(0.001, 0.05) * remaining_confidence * 100
+            
+            # Normalize to ensure they sum to 100%
+            total = sum(all_predictions.values())
+            for name in all_predictions:
+                all_predictions[name] = (all_predictions[name] / total) * 100
+            
+            logger.info(f"🎭 Demo Prediction: {pest_name} ({confidence*100:.1f}%)")
+            logger.info(f"🎨 Image features: {features}")
+            
+            return {
+                'pest_name': pest_name,
+                'confidence': confidence * 100,
+                'prediction_success': confidence >= (self.confidence_threshold / 100),
+                'all_predictions': all_predictions,
+                'model_type': 'Demo'
+            }
+            
+        except Exception as e:
+            logger.error(f"Demo prediction error: {e}")
+            return {
+                'pest_name': 'Error in Classification',
+                'confidence': 0,
+                'prediction_success': False,
+                'error': str(e)
+            }
 
-class OrganicTreatmentDatabase:
-    """Database for organic pest treatment recommendations"""
+class SimpleTreatmentDatabase:
+    """Simple treatment recommendations"""
     
     def __init__(self):
         self.treatments = {
-            'ants': {
-                'severity': 'Low',
-                'crops_affected': 'Various crops, gardens',
-                'organic_treatments': [
-                    {
-                        'method': 'Coffee Grounds',
-                        'description': 'Spread used coffee grounds around plants. Ants dislike the acidity.',
-                        'effectiveness': '75%',
-                        'timeline': '1-2 days',
-                        'cost': '$5-10/acre',
-                        'application': 'Apply dry grounds weekly around affected areas'
-                    },
-                    {
-                        'method': 'Cinnamon Barrier',
-                        'description': 'Sprinkle ground cinnamon around plants to deter ants.',
-                        'effectiveness': '70%',
-                        'timeline': '2-3 days',
-                        'cost': '$10-15/acre',
-                        'application': 'Reapply after rain or watering'
-                    },
-                    {
-                        'method': 'Diatomaceous Earth',
-                        'description': 'Apply food-grade diatomaceous earth around ant trails.',
-                        'effectiveness': '80%',
-                        'timeline': '3-5 days',
-                        'cost': '$15-20/acre',
-                        'application': 'Apply in dry weather, reapply as needed'
-                    }
-                ],
-                'prevention': [
-                    'Remove food sources and standing water',
-                    'Seal entry points around garden beds',
-                    'Plant mint or tansy as natural deterrents',
-                    'Keep garden clean of fallen fruit',
-                    'Use ant-resistant plant varieties'
-                ]
-            },
-            'bees': {
-                'severity': 'Beneficial',
-                'crops_affected': 'All flowering crops (BENEFICIAL)',
-                'organic_treatments': [
-                    {
-                        'method': 'Protection & Encouragement',
-                        'description': '🌟 PROTECT BEES! They are essential pollinators - do not treat as pests.',
-                        'effectiveness': '100%',
-                        'timeline': 'Ongoing',
-                        'cost': '$0/acre',
-                        'application': 'Provide bee-friendly flowers and avoid pesticides during bloom'
-                    },
-                    {
-                        'method': 'Bee-Friendly Plants',
-                        'description': 'Plant lavender, sunflowers, and native wildflowers to support bees.',
-                        'effectiveness': '95%',
-                        'timeline': 'Season-long',
-                        'cost': '$20-30/acre',
-                        'application': 'Plant diverse flowering species for continuous bloom'
-                    }
-                ],
-                'prevention': [
-                    'Never apply pesticides during flowering',
-                    'Provide clean water sources',
-                    'Plant diverse native flowers',
-                    'Avoid disturbing natural nesting sites',
-                    'Support local beekeepers'
-                ]
-            },
-            'beetle': {
-                'severity': 'High',
-                'crops_affected': 'Potatoes, beans, cucumbers, squash',
-                'organic_treatments': [
-                    {
-                        'method': 'Hand Picking',
-                        'description': 'Remove beetles manually during early morning when sluggish.',
-                        'effectiveness': '85%',
-                        'timeline': 'Immediate',
-                        'cost': '$10-15/acre (labor)',
-                        'application': 'Daily inspection and removal during peak activity'
-                    },
-                    {
-                        'method': 'Neem Oil Spray',
-                        'description': 'Apply neem oil solution to affected plants and soil.',
-                        'effectiveness': '80%',
-                        'timeline': '3-7 days',
-                        'cost': '$20-25/acre',
-                        'application': 'Spray every 7-10 days during beetle season'
-                    },
-                    {
-                        'method': 'Row Covers',
-                        'description': 'Use floating row covers during vulnerable plant stages.',
-                        'effectiveness': '90%',
-                        'timeline': 'Season-long',
-                        'cost': '$200-300/acre',
-                        'application': 'Install before beetle emergence, remove during pollination'
-                    }
-                ],
-                'prevention': [
-                    'Crop rotation every 2-3 years',
-                    'Deep cultivation in fall',
-                    'Plant trap crops like radishes',
-                    'Encourage ground beetles and spiders',
-                    'Remove plant debris promptly'
-                ]
-            },
-            'catterpillar': {
-                'severity': 'Medium',
-                'crops_affected': 'Brassicas, tomatoes, corn, various vegetables',
-                'organic_treatments': [
-                    {
-                        'method': 'Bt Spray (Bacillus thuringiensis)',
-                        'description': 'Apply Bt spray targeting caterpillar larvae in evening.',
-                        'effectiveness': '90%',
-                        'timeline': '3-5 days',
-                        'cost': '$25-30/acre',
-                        'application': 'Spray when caterpillars are small, reapply every 7-10 days'
-                    },
-                    {
-                        'method': 'Hand Picking',
-                        'description': 'Remove caterpillars manually when visible.',
-                        'effectiveness': '95%',
-                        'timeline': 'Immediate',
-                        'cost': '$15-20/acre (labor)',
-                        'application': 'Daily inspection, especially undersides of leaves'
-                    },
-                    {
-                        'method': 'Neem Oil',
-                        'description': 'Apply neem oil to disrupt caterpillar feeding and growth.',
-                        'effectiveness': '75%',
-                        'timeline': '5-7 days',
-                        'cost': '$20-25/acre',
-                        'application': 'Apply every 10-14 days as preventive measure'
-                    }
-                ],
-                'prevention': [
-                    'Use pheromone traps for monitoring',
-                    'Encourage birds and beneficial wasps',
-                    'Plant companion plants like dill and fennel',
-                    'Rotate crops annually',
-                    'Remove egg masses when found'
-                ]
-            },
-            'earthworms': {
-                'severity': 'Beneficial',
-                'crops_affected': 'All crops (HIGHLY BENEFICIAL)',
-                'organic_treatments': [
-                    {
-                        'method': 'Protection & Encouragement',
-                        'description': '🌟 PROTECT EARTHWORMS! They improve soil health and structure.',
-                        'effectiveness': '100%',
-                        'timeline': 'Ongoing',
-                        'cost': '$0/acre',
-                        'application': 'Add organic matter and avoid soil compaction'
-                    },
-                    {
-                        'method': 'Soil Enhancement',
-                        'description': 'Add compost and organic matter to encourage earthworm activity.',
-                        'effectiveness': '95%',
-                        'timeline': 'Season-long',
-                        'cost': '$50-75/acre',
-                        'application': 'Apply compost 2-3 times per growing season'
-                    }
-                ],
-                'prevention': [
-                    'Avoid chemical pesticides and fertilizers',
-                    'Maintain soil moisture',
-                    'Add organic compost regularly',
-                    'Minimize soil tillage',
-                    'Keep soil covered with mulch'
-                ]
-            },
-            'earwig': {
-                'severity': 'Medium',
-                'crops_affected': 'Seedlings, soft fruits, flowers',
-                'organic_treatments': [
-                    {
-                        'method': 'Newspaper Traps',
-                        'description': 'Roll up damp newspaper for earwigs to hide in, then dispose.',
-                        'effectiveness': '80%',
-                        'timeline': '1-2 days',
-                        'cost': '$5-10/acre',
-                        'application': 'Place traps in evening, collect and dispose in morning'
-                    },
-                    {
-                        'method': 'Diatomaceous Earth',
-                        'description': 'Apply food-grade diatomaceous earth around plants.',
-                        'effectiveness': '85%',
-                        'timeline': '3-5 days',
-                        'cost': '$15-20/acre',
-                        'application': 'Apply in dry conditions, reapply after rain'
-                    },
-                    {
-                        'method': 'Garden Cleanup',
-                        'description': 'Remove garden debris where earwigs hide during day.',
-                        'effectiveness': '70%',
-                        'timeline': 'Immediate',
-                        'cost': '$10/acre (labor)',
-                        'application': 'Regular removal of mulch, boards, and plant debris'
-                    }
-                ],
-                'prevention': [
-                    'Remove hiding places like boards and debris',
-                    'Use copper strips around sensitive plants',
-                    'Plant trap crops away from main garden',
-                    'Encourage ground beetles and birds',
-                    'Keep garden areas well-lit'
-                ]
-            },
-            'grasshopper': {
-                'severity': 'High',
-                'crops_affected': 'Grains, grasses, vegetables, fruits',
-                'organic_treatments': [
-                    {
-                        'method': 'Row Covers',
-                        'description': 'Use floating row covers to protect crops from grasshoppers.',
-                        'effectiveness': '95%',
-                        'timeline': 'Season-long',
-                        'cost': '$200-350/acre',
-                        'application': 'Install before grasshopper migration'
-                    },
-                    {
-                        'method': 'Encourage Predators',
-                        'description': 'Attract birds and spiders with diverse plantings and habitat.',
-                        'effectiveness': '75%',
-                        'timeline': '2-4 weeks',
-                        'cost': '$30-50/acre',
-                        'application': 'Plant native flowers and provide bird nesting sites'
-                    },
-                    {
-                        'method': 'Neem Oil for Young Hoppers',
-                        'description': 'Apply neem oil spray when grasshoppers are young and vulnerable.',
-                        'effectiveness': '70%',
-                        'timeline': '1-2 weeks',
-                        'cost': '$20-25/acre',
-                        'application': 'Apply early morning when grasshoppers are less active'
-                    }
-                ],
-                'prevention': [
-                    'Maintain diverse habitat for natural predators',
-                    'Till soil in fall to destroy egg masses',
-                    'Use trap crops like wheat or barley',
-                    'Keep grass areas mowed short',
-                    'Remove weeds that serve as food sources'
-                ]
-            },
-            'moth': {
-                'severity': 'Medium',
-                'crops_affected': 'Various crops (larvae cause damage)',
-                'organic_treatments': [
-                    {
-                        'method': 'Pheromone Traps',
-                        'description': 'Use species-specific pheromone traps to catch adult moths.',
-                        'effectiveness': '80%',
-                        'timeline': 'Continuous',
-                        'cost': '$25-35/acre',
-                        'application': 'Install before moth flight period, replace lures monthly'
-                    },
-                    {
-                        'method': 'Light Traps',
-                        'description': 'Install light traps away from crops to attract and capture moths.',
-                        'effectiveness': '70%',
-                        'timeline': 'Nightly',
-                        'cost': '$50-75/acre',
-                        'application': 'Operate during peak moth activity periods'
-                    },
-                    {
-                        'method': 'Bt Spray for Larvae',
-                        'description': 'Apply Bt spray when moth larvae are active.',
-                        'effectiveness': '85%',
-                        'timeline': '3-7 days',
-                        'cost': '$25-30/acre',
-                        'application': 'Target young larvae, apply in evening'
-                    }
-                ],
-                'prevention': [
-                    'Monitor with pheromone traps',
-                    'Remove plant debris and weeds',
-                    'Encourage beneficial insects',
-                    'Use companion planting',
-                    'Practice good crop rotation'
-                ]
-            },
-            'slug': {
-                'severity': 'Medium',
-                'crops_affected': 'Leafy greens, seedlings, soft fruits',
-                'organic_treatments': [
-                    {
-                        'method': 'Iron Phosphate Bait',
-                        'description': 'Use organic iron phosphate slug bait around affected plants.',
-                        'effectiveness': '90%',
-                        'timeline': '3-7 days',
-                        'cost': '$20-30/acre',
-                        'application': 'Apply in evening when slugs are active'
-                    },
-                    {
-                        'method': 'Diatomaceous Earth',
-                        'description': 'Apply food-grade diatomaceous earth as a barrier.',
-                        'effectiveness': '75%',
-                        'timeline': '1-3 days',
-                        'cost': '$15-20/acre',
-                        'application': 'Apply in dry conditions around plants'
-                    },
-                    {
-                        'method': 'Beer Traps',
-                        'description': 'Create beer traps to attract and drown slugs.',
-                        'effectiveness': '70%',
-                        'timeline': '1-2 days',
-                        'cost': '$10-15/acre',
-                        'application': 'Bury containers level with soil, replace beer regularly'
-                    }
-                ],
-                'prevention': [
-                    'Remove hiding places like boards and debris',
-                    'Use copper strips as barriers',
-                    'Encourage ground beetles and birds',
-                    'Reduce moisture around plants',
-                    'Hand-pick in evening when active'
-                ]
-            },
-            'snail': {
-                'severity': 'Medium',
-                'crops_affected': 'Leafy greens, seedlings, fruits',
-                'organic_treatments': [
-                    {
-                        'method': 'Hand Picking',
-                        'description': 'Remove snails manually in evening when they are active.',
-                        'effectiveness': '95%',
-                        'timeline': 'Immediate',
-                        'cost': '$10-15/acre (labor)',
-                        'application': 'Daily collection during peak activity'
-                    },
-                    {
-                        'method': 'Copper Strips',
-                        'description': 'Install copper strips around plants as barriers.',
-                        'effectiveness': '85%',
-                        'timeline': 'Season-long',
-                        'cost': '$100-150/acre',
-                        'application': 'Install around bed perimeters and individual plants'
-                    },
-                    {
-                        'method': 'Iron Phosphate Bait',
-                        'description': 'Use organic iron phosphate bait safe for pets and wildlife.',
-                        'effectiveness': '90%',
-                        'timeline': '5-7 days',
-                        'cost': '$20-30/acre',
-                        'application': 'Apply in evening, reapply after rain'
-                    }
-                ],
-                'prevention': [
-                    'Remove hiding places and debris',
-                    'Create dry barriers around plants',
-                    'Encourage natural predators',
-                    'Water plants in morning to reduce evening moisture',
-                    'Use raised beds for better drainage'
-                ]
-            },
-            'wasp': {
-                'severity': 'Beneficial',
-                'crops_affected': 'Various crops (BENEFICIAL PREDATOR)',
-                'organic_treatments': [
-                    {
-                        'method': 'Protection & Encouragement',
-                        'description': '🌟 PROTECT BENEFICIAL WASPS! They control many pest insects.',
-                        'effectiveness': '100%',
-                        'timeline': 'Ongoing',
-                        'cost': '$0/acre',
-                        'application': 'Avoid pesticides and provide flowering plants'
-                    },
-                    {
-                        'method': 'Habitat Enhancement',
-                        'description': 'Plant flowers that provide nectar for beneficial wasps.',
-                        'effectiveness': '90%',
-                        'timeline': 'Season-long',
-                        'cost': '$25-40/acre',
-                        'application': 'Plant diverse flowering species'
-                    }
-                ],
-                'prevention': [
-                    'Only control if near high-traffic areas',
-                    'Provide alternative nesting sites',
-                    'Plant flowers for beneficial species',
-                    'Avoid broad-spectrum pesticides',
-                    'Educate about beneficial vs. pest species'
-                ]
-            },
-            'weevil': {
-                'severity': 'High',
-                'crops_affected': 'Grains, nuts, stored products, root crops',
-                'organic_treatments': [
-                    {
-                        'method': 'Beneficial Nematodes',
-                        'description': 'Apply beneficial nematodes to soil to target weevil larvae.',
-                        'effectiveness': '85%',
-                        'timeline': '2-4 weeks',
-                        'cost': '$40-60/acre',
-                        'application': 'Apply to moist soil when temperature is 60-85°F'
-                    },
-                    {
-                        'method': 'Diatomaceous Earth',
-                        'description': 'Apply food-grade diatomaceous earth around affected plants.',
-                        'effectiveness': '75%',
-                        'timeline': '1-2 weeks',
-                        'cost': '$15-25/acre',
-                        'application': 'Apply in dry conditions, reapply after rain'
-                    },
-                    {
-                        'method': 'Sticky Traps',
-                        'description': 'Use yellow sticky traps to monitor and capture adult weevils.',
-                        'effectiveness': '60%',
-                        'timeline': 'Continuous',
-                        'cost': '$15-20/acre',
-                        'application': 'Replace traps weekly during peak activity'
-                    }
-                ],
-                'prevention': [
-                    'Crop rotation with non-host plants',
-                    'Remove plant debris after harvest',
-                    'Deep cultivation to expose larvae',
-                    'Use resistant plant varieties',
-                    'Monitor with pheromone traps'
-                ]
-            }
+            'ants': 'Use coffee grounds or cinnamon around plants. Apply diatomaceous earth.',
+            'bees': 'PROTECT! Essential pollinators - do not treat. Encourage with flowers.',
+            'beetle': 'Hand pick in early morning. Use neem oil spray or row covers.',
+            'catterpillar': 'Hand pick or use Bt (Bacillus thuringiensis) spray.',
+            'earthworms': 'BENEFICIAL! Improve soil health - protect them.',
+            'earwig': 'Use newspaper traps or diatomaceous earth around plants.',
+            'grasshopper': 'Use row covers. Encourage birds with bird houses.',
+            'moth': 'Use pheromone traps or light traps in evening.',
+            'slug': 'Use iron phosphate bait or copper strips around plants.',
+            'snail': 'Hand pick or use organic slug bait. Remove hiding places.',
+            'wasp': 'BENEFICIAL predators - usually protect. Remove only if necessary.',
+            'weevil': 'Use beneficial nematodes or row covers. Clean up debris.'
         }
     
-    def get_treatment_info(self, pest_name):
-        """Get treatment information for a specific pest"""
-        # Normalize pest name
+    def get_treatment(self, pest_name):
+        """Get simple treatment recommendation"""
+        pest_key = pest_name.lower()
         for key in self.treatments.keys():
-            if key.lower() in pest_name.lower() or pest_name.lower() in key.lower():
+            if key in pest_key or pest_key in key:
                 return self.treatments[key]
-        
-        # Return generic treatment if specific pest not found
-        return {
-            'severity': 'Medium',
-            'crops_affected': 'Various crops may be affected',
-            'organic_treatments': [
-                {
-                    'method': 'General Organic Spray',
-                    'description': 'Use a general organic insecticidal soap or neem oil solution.',
-                    'effectiveness': '70%',
-                    'timeline': '3-7 days',
-                    'cost': '$15-25/acre',
-                    'application': 'Apply during cooler parts of the day'
-                },
-                {
-                    'method': 'Beneficial Insect Habitat',
-                    'description': 'Create habitat for beneficial insects with diverse plantings.',
-                    'effectiveness': '60%',
-                    'timeline': 'Season-long',
-                    'cost': '$20-30/acre',
-                    'application': 'Plant flowering plants near crops'
-                }
-            ],
-            'prevention': [
-                'Regular monitoring and inspection',
-                'Maintain healthy soil with organic matter',
-                'Proper crop rotation',
-                'Remove infected plant debris',
-                'Encourage biodiversity in the farm ecosystem'
-            ]
-        }
+        return 'Monitor regularly. Use organic neem oil spray or insecticidal soap as general treatment.'
 
 # Initialize global objects
-pest_model = PestClassifier()
-treatment_db = OrganicTreatmentDatabase()
-
-def init_database():
-    """Initialize SQLite database for storing analysis history"""
-    conn = sqlite3.connect('data/pest_analysis.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS analyses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            pest_name TEXT,
-            confidence REAL,
-            severity TEXT,
-            image_path TEXT,
-            treatment_applied TEXT,
-            user_notes TEXT
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-def save_analysis(pest_name, confidence, severity, image_path, treatment_applied='', user_notes=''):
-    """Save analysis results to database"""
-    conn = sqlite3.connect('data/pest_analysis.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        INSERT INTO analyses (pest_name, confidence, severity, image_path, treatment_applied, user_notes)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (pest_name, confidence, severity, image_path, treatment_applied, user_notes))
-    
-    conn.commit()
-    conn.close()
-
-def get_recent_analyses(limit=10):
-    """Get recent analysis history"""
-    conn = sqlite3.connect('data/pest_analysis.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT * FROM analyses 
-        ORDER BY timestamp DESC 
-        LIMIT ?
-    ''', (limit,))
-    
-    analyses = cursor.fetchall()
-    conn.close()
-    
-    return analyses
+pest_model = SmartPestClassifier()
+treatment_db = SimpleTreatmentDatabase()
 
 @app.route('/')
 def home():
-    """Main dashboard page"""
-    recent_analyses = get_recent_analyses(5)
-    return render_template('index.html', recent_analyses=recent_analyses)
+    """Main page with image upload and chat"""
+    return render_template('index.html')
 
-@app.route('/analyze', methods=['GET', 'POST'])
+@app.route('/analyze', methods=['POST'])
 def analyze():
-    """Pest analysis page"""
+    """Handle image analysis"""
+    try:
+        # Handle file upload
+        if 'pest_image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        file = request.files['pest_image']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if file and allowed_file(file.filename):
+            # Save uploaded file
+            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Analyze the image
+            image = Image.open(filepath)
+            prediction_result = pest_model.predict(image)
+            
+            if prediction_result['prediction_success']:
+                # Get treatment recommendation
+                treatment = treatment_db.get_treatment(prediction_result['pest_name'])
+                
+                return jsonify({
+                    'success': True,
+                    'pest_name': prediction_result['pest_name'],
+                    'confidence': prediction_result['confidence'],
+                    'treatment': treatment,
+                    'model_type': prediction_result.get('model_type', 'Unknown'),
+                    'image_path': filename
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': prediction_result.get('error', 'Could not identify the pest. Please try with a clearer image.')
+                })
+        
+        else:
+            return jsonify({'error': 'Invalid file type. Please upload JPEG, PNG, or WebP images.'}), 400
+            
+    except Exception as e:
+        logger.error(f"Analysis error: {e}")
+        return jsonify({'error': f'An error occurred during analysis: {str(e)}'}), 500
+
+@app.route('/chat', methods=['GET', 'POST'])
+def chat():
+    """AI chat endpoint"""
     if request.method == 'POST':
         try:
-            # Handle file upload
-            if 'pest_image' not in request.files:
-                flash('No image file provided', 'error')
-                return redirect(request.url)
+            data = request.get_json()
+            user_message = data.get('message', '').lower()
             
-            file = request.files['pest_image']
+            # Simple rule-based responses
+            response = generate_chat_response(user_message)
             
-            if file.filename == '':
-                flash('No file selected', 'error')
-                return redirect(request.url)
+            return jsonify({'response': response})
             
-            if file and allowed_file(file.filename):
-                # Save uploaded file
-                filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                
-                # Analyze the image
-                image = Image.open(filepath)
-                prediction_result = pest_model.predict(image)
-                
-                if prediction_result['prediction_success']:
-                    # Get treatment recommendations
-                    treatment_info = treatment_db.get_treatment_info(prediction_result['pest_name'])
-                    
-                    # Save analysis to database
-                    save_analysis(
-                        prediction_result['pest_name'],
-                        prediction_result['confidence'],
-                        treatment_info['severity'],
-                        filepath
-                    )
-                    
-                    return render_template('results.html', 
-                                         prediction=prediction_result,
-                                         treatment=treatment_info,
-                                         image_path=filename)
-                else:
-                    flash('Could not identify the pest. Please try with a clearer image.', 'warning')
-                    return render_template('analyze.html')
-            
-            else:
-                flash('Invalid file type. Please upload JPEG, PNG, or WebP images.', 'error')
-                return redirect(request.url)
-                
         except Exception as e:
-            logger.error(f"Analysis error: {e}")
-            flash(f'An error occurred during analysis: {str(e)}', 'error')
-            return render_template('analyze.html')
+            logger.error(f"Chat error: {e}")
+            return jsonify({'error': 'Sorry, I encountered an error. Please try again.'}), 500
     
-    return render_template('analyze.html')
-
-@app.route('/chat')
-def chat():
-    """AI chat consultation page"""
-    return render_template('chat.html')
-
-@app.route('/api/chat', methods=['POST'])
-def api_chat():
-    """API endpoint for chat responses"""
-    try:
-        data = request.get_json()
-        user_message = data.get('message', '').lower()
-        
-        # Simple rule-based responses for offline capability
-        response = generate_chat_response(user_message)
-        
-        return jsonify({'response': response})
-        
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        return jsonify({'error': 'Sorry, I encountered an error. Please try again.'}), 500
+    # For GET requests, return the main page (chat is integrated)
+    return render_template('index.html')
 
 def generate_chat_response(message):
-    """Generate chat responses based on user input"""
+    """Generate simple chat responses"""
     message = message.lower()
     
     if any(word in message for word in ['aphid', 'aphids']):
-        return """Aphids are small, soft-bodied insects that feed on plant sap. For organic control:
-        
-1. **Insecticidal Soap**: Mix 2 tbsp mild liquid soap per gallon of water
-2. **Neem Oil**: Apply 2-4 tbsp per gallon every 7-14 days
-3. **Beneficial Insects**: Release ladybugs or lacewings
-4. **Prevention**: Avoid over-fertilizing with nitrogen, use reflective mulches
-
-Would you like specific application instructions for any of these methods?"""
+        return "For aphids: Use insecticidal soap (2 tbsp per gallon water) or neem oil. Release ladybugs for natural control."
     
     elif any(word in message for word in ['beetle', 'beetles']):
-        return """Beetles can be challenging pests. Organic management strategies:
-        
-1. **Hand Picking**: Most effective in early morning when beetles are sluggish
-2. **Beneficial Nematodes**: Apply to soil for larvae control
-3. **Diatomaceous Earth**: Dust around plants (food-grade only)
-4. **Row Covers**: Physical barrier during vulnerable stages
-5. **Crop Rotation**: Break pest cycles every 2-3 years
-
-Which crop are you protecting from beetles?"""
+        return "For beetles: Hand pick in early morning, use beneficial nematodes for larvae, or apply diatomaceous earth around plants."
     
-    elif any(word in message for word in ['organic', 'treatment', 'control']):
-        return """Key organic pest management principles:
-        
-1. **Prevention First**: Healthy soil, proper spacing, resistant varieties
-2. **Monitoring**: Weekly inspections, sticky traps, threshold-based treatment
-3. **Biological Control**: Beneficial insects, parasites, predators
-4. **Organic Sprays**: Neem oil, insecticidal soap, horticultural oils
-5. **Physical Methods**: Row covers, barriers, hand removal
-6. **Cultural Practices**: Crop rotation, companion planting, sanitation
-
-What specific pest or crop situation are you dealing with?"""
+    elif any(word in message for word in ['slug', 'slugs', 'snail', 'snails']):
+        return "For slugs/snails: Use iron phosphate bait, copper strips, or hand pick. Remove hiding places like debris."
     
-    elif any(word in message for word in ['cost', 'price', 'expensive']):
-        return """Organic pest management costs typically:
-        
-- **Insecticidal Soap**: $10-20/acre
-- **Neem Oil**: $20-30/acre  
-- **Beneficial Insects**: $30-80/acre
-- **Sticky Traps**: $10-20/acre
-- **Row Covers**: $200-400/acre (reusable)
-
-**Cost-Saving Tips**:
-- Prevention is always cheaper than treatment
-- Make your own insecticidal soap
-- Encourage native beneficial insects
-- Use integrated approaches for better ROI
-
-Would you like specific budget recommendations for your farm size?"""
+    elif any(word in message for word in ['caterpillar', 'catterpillar', 'worm']):
+        return "For caterpillars: Hand pick or use Bt spray (Bacillus thuringiensis). Check undersides of leaves regularly."
     
-    elif any(word in message for word in ['when', 'timing', 'time']):
-        return """Optimal timing for organic treatments:
-        
-**Daily Timing**:
-- Early morning (6-8 AM) or evening (6-8 PM)
-- Avoid midday heat and beneficial insect activity
-
-**Seasonal Timing**:
-- Prevention: Before pest emergence
-- Treatment: At first sign of damage
-- Beneficial releases: When conditions are optimal
-
-**Weather Considerations**:
-- No rain expected for 4-6 hours after application
-- Light winds (under 10 mph)
-- Temperature between 65-85°F
-
-What specific treatment are you planning to apply?"""
+    elif any(word in message for word in ['ant', 'ants']):
+        return "For ants: Use coffee grounds, cinnamon, or diatomaceous earth around plants. Find and eliminate the source."
+    
+    elif any(word in message for word in ['organic', 'natural', 'safe']):
+        return "Safe organic options: Neem oil, insecticidal soap, beneficial insects, companion planting, and crop rotation."
+    
+    elif any(word in message for word in ['spray', 'treatment']):
+        return "General organic spray: Mix 1-2 tbsp mild soap + 1 tbsp neem oil per quart water. Spray in evening to avoid harming bees."
     
     elif any(word in message for word in ['help', 'identify', 'what']):
-        return """I can help you with:
-        
-📸 **Upload a photo** for AI-powered pest identification
-🌱 **Organic treatment** recommendations
-📊 **Cost estimates** and application timing
-🔄 **Prevention strategies** and IPM planning
-📚 **Crop-specific** pest management advice
-📈 **Treatment effectiveness** comparisons
-
-To get started, you can:
-- Upload a pest image for identification
-- Ask about specific pests or treatments
-- Request organic certification-approved methods
-
-What would you like help with today?"""
+        return "I can help identify pests from photos and suggest organic treatments. Upload an image above or ask about specific pests!"
     
     else:
-        return """I'm here to help with organic pest management! I can assist with:
-        
-- Pest identification from photos
-- Organic treatment recommendations  
-- Prevention strategies
-- Cost estimates and timing
-- IPM (Integrated Pest Management) planning
-
-Try asking about specific pests like "How do I control aphids organically?" or upload a photo for AI identification."""
-
-@app.route('/history')
-def history():
-    """Analysis history page"""
-    analyses = get_recent_analyses(50)
-    return render_template('history.html', analyses=analyses)
+        return "I can help with pest identification and organic treatments. Try uploading a photo or ask about specific pests like aphids, beetles, or slugs."
 
 @app.route('/api/analyze_base64', methods=['POST'])
 def api_analyze_base64():
@@ -897,13 +469,13 @@ def api_analyze_base64():
         prediction_result = pest_model.predict(image_data)
         
         if prediction_result['prediction_success']:
-            treatment_info = treatment_db.get_treatment_info(prediction_result['pest_name'])
+            treatment = treatment_db.get_treatment(prediction_result['pest_name'])
             
             return jsonify({
                 'success': True,
                 'pest_name': prediction_result['pest_name'],
                 'confidence': prediction_result['confidence'],
-                'treatment': treatment_info
+                'treatment': treatment
             })
         else:
             return jsonify({
@@ -921,8 +493,5 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 if __name__ == '__main__':
-    # Initialize the application
-    init_database()
-    
-    # Run the application
+    # Run the simplified application
     app.run(debug=True, host='0.0.0.0', port=5000)
