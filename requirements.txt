@@ -7,6 +7,9 @@ Pillow==10.0.0
 # Data science and numerical computing
 numpy==1.24.3
 
+# HTTP requests for LM Studio integration
+requests==2.31.0
+
 # Optional: For AI model support (if available)
 tensorflow==2.13.0
 

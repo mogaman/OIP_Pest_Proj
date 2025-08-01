@@ -1,32 +1,24 @@
-# OrganicGuard AI - Pest Management System
+# 🌱 OrganicGuard AI - Pest Management System
 
-A comprehensive Python-based web application for AI-powered organic pest identification and management. This system provides farmers with instant pest identification using computer vision and offers certified organic treatment recommendations.
-
-## 🌱 Features
-
-### Core Functionality
-- **AI Pest Identification**: Advanced computer vision for accurate pest classification
-- **Organic Treatment Recommendations**: OMRI-approved treatment methods with cost estimates
-- **Offline Capability**: Works without internet connection for remote farming locations
-- **Expert AI Consultation**: 24/7 chat-based agricultural advice
-- **Analysis History**: Track and monitor pest management over time
-- **Mobile-Friendly**: Responsive design for field use
-
-### AI Capabilities
-- **Computer Vision Model**: Custom CNN trained on agricultural pest datasets
-- **95%+ Accuracy**: High-precision pest identification
-- **Confidence Scoring**: Reliability assessment for each identification
-- **Multiple Pest Types**: Supports 10+ common agricultural pests
-- **Real-time Processing**: Analysis completed in under 30 seconds
-
-### Organic Farming Focus
-- **OMRI Approved**: All treatments comply with organic certification standards
-- **IPM Strategies**: Integrated Pest Management recommendations
-- **Cost Estimates**: Economic analysis for treatment options
-- **Prevention Tips**: Proactive pest management strategies
-- **Sustainable Methods**: Environmentally friendly solutions
+An intelligent organic farming assistant that helps identify pests and recommends eco-friendly treatments using local AI powered by LM Studio.
 
 ## 🚀 Quick Start
+
+### LM Studio Setup (Recommended)
+1. **Install LM Studio** from https://lmstudio.ai/
+2. **Download a model** (recommended: Llama-3.2-3B-Instruct)
+3. **Start the server** in LM Studio
+4. **Run the app:**
+   ```bash
+   cd organic_farm_pest
+   python app.py
+   ```
+5. **Open browser:** http://localhost:5000
+
+📖 **Detailed Guide:** See `LMSTUDIO_SETUP.md`
+
+### No AI Mode (Basic Functionality)
+The app works immediately with intelligent fallback responses if LM Studio is not running.
 
 ### Prerequisites
 - Python 3.8 or higher

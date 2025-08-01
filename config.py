@@ -220,3 +220,126 @@ CHAT_TEMPLATES = {
     'prevention_help': "Prevention is key in organic farming. Would you like tips for specific pests or general IPM strategies?",
     'error': "I apologize, but I'm having trouble understanding your request. Could you please rephrase your question?"
 }
+
+# LLM Configuration for LM Studio Integration
+LLM_CONFIG = {
+    'provider': 'lmstudio',  # 'lmstudio' or 'none'
+    'lmstudio': {
+        'base_url': 'http://localhost:1234/v1',  # LM Studio default API endpoint
+        'model': 'local-model',  # LM Studio uses generic model name
+        'temperature': 0.3,      # Lower for more consistent responses
+        'max_tokens': 400,
+        'timeout': 30,
+        'api_key': 'llama-2-7b-chat'   # LM Studio API key (matches the model)
+    },
+    'system_prompt': """You are OrganicGuard AI, a specialized expert ONLY in organic pest management and sustainable farming. 
+
+IMPORTANT CONSTRAINTS:
+- ONLY discuss organic/biological pest control methods
+- ONLY help with the 12 pest types: ants, bees, beetle, caterpillar, earthworms, earwig, grasshopper, moth, slug, snail, wasp, weevil
+- NEVER recommend chemical pesticides or synthetic treatments
+- If asked about non-pest topics, politely redirect to pest management
+- Keep responses practical, concise, and farmer-focused
+
+AVAILABLE TREATMENTS: Insecticidal Soap, Neem Oil, Beneficial Insects, Diatomaceous Earth, Coffee Grounds, Hand Picking, Row Covers, Sticky Traps
+
+REMEMBER: Bees and earthworms are BENEFICIAL - never recommend controlling them!"""
+}
+
+# Context keywords for intent detection
+CONTEXT_KEYWORDS = {
+    'identification': ['identify', 'what is', 'looks like', 'found', 'see', 'picture'],
+    'treatment': ['control', 'kill', 'get rid', 'treat', 'eliminate', 'manage'],
+    'prevention': ['prevent', 'avoid', 'stop', 'protect', 'keep away'],
+    'organic': ['organic', 'natural', 'safe', 'non-toxic', 'chemical-free'],
+    'beneficial': ['beneficial', 'good', 'helpful', 'positive', 'useful'],
+    'damage': ['damage', 'harm', 'eating', 'destroying', 'ruining']
+}
+
+# Enhanced pest knowledge base for LLM context
+PEST_KNOWLEDGE_BASE = {
+    'ants': {
+        'identification': 'Social insects, usually 6 legs, segmented body, often in trails',
+        'damage': 'Can farm aphids, disturb plant roots, some species bite',
+        'organic_treatments': ['Coffee Grounds', 'Diatomaceous Earth', 'Cinnamon barriers'],
+        'prevention': 'Remove food sources, seal entry points, maintain clean areas',
+        'beneficial_note': 'Some ants are beneficial predators of other pests'
+    },
+    'bees': {
+        'identification': 'Fuzzy body, important pollinators, various sizes',
+        'damage': 'Generally BENEFICIAL - essential for pollination',
+        'organic_treatments': ['NEVER CONTROL BEES - relocate hives professionally if needed'],
+        'prevention': 'Provide alternative nesting sites away from crops',
+        'beneficial_note': 'CRITICAL POLLINATORS - essential for food production'
+    },
+    'beetle': {
+        'identification': 'Hard wing covers, diverse sizes, often metallic coloration',
+        'damage': 'Leaf feeding, root damage, some bore into stems',
+        'organic_treatments': ['Hand Picking', 'Neem Oil', 'Beneficial Insects', 'Row Covers'],
+        'prevention': 'Crop rotation, beneficial habitat, proper sanitation',
+        'beneficial_note': 'Many beetles are beneficial predators'
+    },
+    'catterpillar': {
+        'identification': 'Soft-bodied larvae, multiple legs, various colors',
+        'damage': 'Leaf feeding, can defoliate plants rapidly',
+        'organic_treatments': ['Hand Picking', 'Bt spray', 'Beneficial Insects', 'Row Covers'],
+        'prevention': 'Encourage beneficial wasps and birds',
+        'beneficial_note': 'Will become moths/butterflies - some are beneficial pollinators'
+    },
+    'earthworms': {
+        'identification': 'Segmented, elongated, soil-dwelling',
+        'damage': 'NO DAMAGE - extremely beneficial for soil health',
+        'organic_treatments': ['NEVER CONTROL - encourage earthworm populations'],
+        'prevention': 'Protect earthworm habitat, avoid soil compaction',
+        'beneficial_note': 'Essential for soil aeration and nutrient cycling'
+    },
+    'earwig': {
+        'identification': 'Pincer-like appendages, nocturnal, brown/black',
+        'damage': 'Minor leaf feeding, can be both pest and predator',
+        'organic_treatments': ['Newspaper traps', 'Diatomaceous Earth', 'Hand removal'],
+        'prevention': 'Remove debris, reduce moisture areas',
+        'beneficial_note': 'Often beneficial - eats aphids and other soft-bodied pests'
+    },
+    'grasshopper': {
+        'identification': 'Large hind legs for jumping, long antennae',
+        'damage': 'Heavy leaf feeding, can devastate crops in swarms',
+        'organic_treatments': ['Row Covers', 'Beneficial birds', 'Neem Oil'],
+        'prevention': 'Encourage natural predators, remove weedy areas',
+        'beneficial_note': 'Important food source for birds and other wildlife'
+    },
+    'moth': {
+        'identification': 'Flying insects, often nocturnal, feathery antennae',
+        'damage': 'Adults rarely damage plants, larvae (caterpillars) may feed',
+        'organic_treatments': ['Pheromone traps', 'Light traps', 'Beneficial Insects'],
+        'prevention': 'Remove crop residue, encourage beneficial predators',
+        'beneficial_note': 'Many moths are important nighttime pollinators'
+    },
+    'slug': {
+        'identification': 'Soft-bodied, no shell, leave slime trails',
+        'damage': 'Irregular holes in leaves, especially seedlings',
+        'organic_treatments': ['Beer traps', 'Copper barriers', 'Hand Picking', 'Diatomaceous Earth'],
+        'prevention': 'Reduce moisture, remove hiding places',
+        'beneficial_note': 'Some slugs help decompose organic matter'
+    },
+    'snail': {
+        'identification': 'Similar to slugs but with shells',
+        'damage': 'Similar to slugs - leaf feeding, especially young plants',
+        'organic_treatments': ['Hand Picking', 'Copper barriers', 'Beer traps', 'Crushed eggshells'],
+        'prevention': 'Same as slugs - reduce moisture and hiding spots',
+        'beneficial_note': 'Some snails are beneficial decomposers'
+    },
+    'wasp': {
+        'identification': 'Narrow waist, less fuzzy than bees, can be colorful',
+        'damage': 'Most wasps are beneficial predators',
+        'organic_treatments': ['Identify species first - many are beneficial'],
+        'prevention': 'Only control if truly problematic, provide alternative habitats',
+        'beneficial_note': 'Most wasps are excellent predators of pest insects'
+    },
+    'weevil': {
+        'identification': 'Snout-like projection, hard body, often small',
+        'damage': 'Feeding on seeds, fruits, leaves, can damage stored crops',
+        'organic_treatments': ['Crop rotation', 'Beneficial Insects', 'Neem Oil', 'Diatomaceous Earth'],
+        'prevention': 'Proper storage, field sanitation, beneficial habitat',
+        'beneficial_note': 'Some weevils are used as biological control agents'
+    }
+}

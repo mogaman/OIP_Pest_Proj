@@ -6,18 +6,16 @@ A simplified Flask application for pest identification and treatment recommendat
 import os
 import io
 import base64
+from datetime import datetime
 from PIL import Image
 import numpy as np
 from flask import Flask, render_template, request, jsonify
 import random
 import logging
 
-"""
-Organic Farm Pest Management AI - Simple Version
-A simplified Flask application for pest identification and treatment recommendations
-"""
-
-import os
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 import io
 import base64
 from PIL import Image
@@ -39,6 +37,17 @@ try:
 except ImportError:
     TF_AVAILABLE = False
     logger.warning("⚠️ TensorFlow not available - using demo mode")
+
+# Import LLM service (LM Studio support)
+try:
+    from llm_service import OrganicGuardLLM
+    LLM_AVAILABLE = True
+    organic_guard_llm = OrganicGuardLLM()  # Initialize the LLM service
+    logger.info("✅ LM Studio LLM service loaded")
+except ImportError as e:
+    LLM_AVAILABLE = False
+    organic_guard_llm = None  # Set to None if not available
+    logger.warning(f"⚠️ LM Studio LLM service not available: {e}")
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -273,18 +282,36 @@ def analyze():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Simple chat endpoint"""
+    """Enhanced chat endpoint with LM Studio LLM integration"""
     try:
         data = request.get_json()
-        message = data.get('message', '').lower()
+        message = data.get('message', '').strip()
         
-        response = generate_chat_response(message)
+        if not message:
+            return jsonify({'error': 'Please provide a message'}), 400
         
-        return jsonify({'response': response})
+        # Use LLM service if available
+        if LLM_AVAILABLE and organic_guard_llm is not None:
+            response = organic_guard_llm.generate_response(message)
+            model_used = 'lmstudio' if organic_guard_llm.available else 'specialized_fallback'
+        else:
+            # Fallback to basic response generation
+            response = generate_chat_response(message)
+            model_used = 'basic_fallback'
+        
+        return jsonify({
+            'response': response,
+            'model_used': model_used,
+            'project_focused': True,
+            'timestamp': datetime.now().isoformat() if 'datetime' in globals() else None
+        })
         
     except Exception as e:
         logger.error(f"Chat error: {e}")
-        return jsonify({'response': 'Sorry, I encountered an error. Please try again.'})
+        return jsonify({
+            'response': "I'm experiencing some technical difficulties. Please try asking about pest identification, organic treatments, or prevention methods.",
+            'error': True
+        }), 500
 
 def generate_chat_response(message):
     """Generate simple chat responses"""
@@ -424,8 +451,9 @@ Try asking about specific pests like "How do I control aphids organically?" or u
 
 @app.route('/history')
 def history():
-    """Analysis history page"""
-    analyses = get_recent_analyses(50)
+    """Analysis history page - simplified version"""
+    # Since we simplified the app without database, return empty history
+    analyses = []
     return render_template('history.html', analyses=analyses)
 
 @app.route('/api/analyze_base64', methods=['POST'])
@@ -466,8 +494,11 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 if __name__ == '__main__':
-    # Initialize the application
-    init_database()
+    # Run the application with LM Studio LLM integration
+    logger.info("🚀 Starting OrganicGuard AI with LM Studio LLM integration")
+    if LLM_AVAILABLE and organic_guard_llm is not None and organic_guard_llm.available:
+        logger.info(f"🤖 LM Studio LLM ready and available")
+    else:
+        logger.info("📝 Running in fallback mode - install LM Studio for advanced AI chat")
     
-    # Run the application
     app.run(debug=True, host='0.0.0.0', port=5000)
