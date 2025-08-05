@@ -273,7 +273,7 @@ def analyze():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Enhanced chat endpoint with LM Studio LLM integration"""
+    """Enhanced chat endpoint with LM Studio LLM integration and loading states"""
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
@@ -281,28 +281,57 @@ def chat():
         if not message:
             return jsonify({'error': 'Please provide a message'}), 400
         
+        # Log start time for response timing
+        start_time = datetime.now()
+        logger.info(f"💬 Chat request received: {message[:50]}...")
+        
         # Use LLM service if available
         if LLM_AVAILABLE and organic_guard_llm is not None:
+            logger.info("🤖 Using LM Studio LLM for response generation...")
             response = organic_guard_llm.generate_response(message)
             model_used = 'lmstudio' if hasattr(organic_guard_llm, 'available') and organic_guard_llm.available else 'specialized_fallback'
         else:
+            logger.info("📝 Using fallback response generation...")
             # Fallback to basic response generation
             response = generate_chat_response(message)
             model_used = 'basic_fallback'
+        
+        # Calculate response time
+        end_time = datetime.now()
+        response_time = (end_time - start_time).total_seconds()
+        logger.info(f"✅ Response generated in {response_time:.2f} seconds")
         
         return jsonify({
             'response': response,
             'model_used': model_used,
             'project_focused': True,
-            'timestamp': datetime.now().isoformat() if 'datetime' in globals() else None
+            'timestamp': datetime.now().isoformat(),
+            'response_time': round(response_time, 2),
+            'loading_complete': True,
+            'success': True
         })
         
     except Exception as e:
         logger.error(f"Chat error: {e}")
         return jsonify({
             'response': "I'm experiencing some technical difficulties. Please try asking about pest identification, organic treatments, or prevention methods.",
-            'error': True
+            'error': True,
+            'loading_complete': True,
+            'success': False
         }), 500
+
+@app.route('/chat/status', methods=['GET'])
+def chat_status():
+    """Check chat service status and estimated response times"""
+    llm_ready = LLM_AVAILABLE and organic_guard_llm is not None and hasattr(organic_guard_llm, 'available') and organic_guard_llm.available
+    
+    return jsonify({
+        'llm_available': LLM_AVAILABLE and organic_guard_llm is not None,
+        'llm_ready': llm_ready,
+        'estimated_response_time': '2-10 seconds' if llm_ready else '1-2 seconds',
+        'model_type': 'LM Studio' if llm_ready else 'Fallback',
+        'status': 'ready'
+    })
 
 def generate_chat_response(message):
     """Generate simple chat responses"""

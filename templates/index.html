@@ -108,6 +108,56 @@
             text-align: center;
             color: #666;
             display: none;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            margin-top: 10px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .typing-indicator {
+            display: inline-flex;
+            gap: 3px;
+            margin-right: 10px;
+        }
+        
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #007bff;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: #6c757d;
+        }
+        
+        .chat-input:disabled {
+            opacity: 0.7;
+            background-color: #f8f9fa;
+            cursor: not-allowed;
         }
         .preview-image {
             max-width: 300px;
@@ -146,6 +196,14 @@
             <h3>💬 Ask About Pest Management</h3>
             <input type="text" id="chatInput" class="chat-input" placeholder="Ask about organic pest control, treatments, or specific pests...">
             <button id="chatBtn" class="btn">Ask Question</button>
+            <div id="chatLoading" class="loading">
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <span>OrganicGuard AI is thinking...</span>
+            </div>
             <div id="chatResponse" class="chat-response"></div>
         </div>
     </div>
@@ -265,6 +323,25 @@
             const question = document.getElementById('chatInput').value.trim();
             if (!question) return;
             
+            // Get UI elements
+            const chatInput = document.getElementById('chatInput');
+            const chatBtn = document.getElementById('chatBtn');
+            const chatLoading = document.getElementById('chatLoading');
+            const chatResponse = document.getElementById('chatResponse');
+            
+            // Show loading state
+            chatInput.disabled = true;
+            chatBtn.disabled = true;
+            chatBtn.innerHTML = '⏳ Sending...';
+            chatLoading.style.display = 'block';
+            chatResponse.style.display = 'none';
+            
+            // Clear input
+            chatInput.value = '';
+            
+            // Record start time
+            const startTime = Date.now();
+            
             fetch('/chat', {
                 method: 'POST',
                 headers: {
@@ -274,16 +351,42 @@
             })
             .then(response => response.json())
             .then(data => {
-                const responseDiv = document.getElementById('chatResponse');
-                responseDiv.innerHTML = `<strong>💬 AI Response:</strong><br>${data.response}`;
-                responseDiv.style.display = 'block';
-                document.getElementById('chatInput').value = '';
+                // Calculate response time
+                const responseTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                
+                // Hide loading
+                chatLoading.style.display = 'none';
+                
+                // Show response
+                if (data.error) {
+                    chatResponse.innerHTML = `<p>❌ ${data.response}</p>`;
+                } else {
+                    chatResponse.innerHTML = `
+                        <strong>🤖 OrganicGuard AI:</strong><br>
+                        ${data.response}
+                        <br><br>
+                        <small style="color: #666;">
+                            Response time: ${responseTime}s | Model: ${data.model_used || 'fallback'}
+                        </small>
+                    `;
+                }
+                chatResponse.style.display = 'block';
             })
             .catch(error => {
-                const responseDiv = document.getElementById('chatResponse');
-                responseDiv.innerHTML = '<p>❌ Chat service temporarily unavailable.</p>';
-                responseDiv.style.display = 'block';
-                console.error('Error:', error);
+                // Hide loading
+                chatLoading.style.display = 'none';
+                
+                // Show error
+                chatResponse.innerHTML = '<p>❌ Chat service temporarily unavailable. Please try again.</p>';
+                chatResponse.style.display = 'block';
+                console.error('Chat error:', error);
+            })
+            .finally(() => {
+                // Reset UI state
+                chatInput.disabled = false;
+                chatBtn.disabled = false;
+                chatBtn.innerHTML = 'Ask Question';
+                chatInput.focus();
             });
         }
     </script>

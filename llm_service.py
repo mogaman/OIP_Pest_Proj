@@ -24,7 +24,7 @@ class OrganicGuardLLM:
         self.base_url = base_url.rstrip('/')
         self.model_name = model_name
         self.available = False
-        self.timeout = 30
+        self.timeout = 60   
         
         # Test connection on initialization
         self._test_connection()
@@ -45,7 +45,7 @@ Guidelines:
 - Provide practical, actionable advice
 - Include timing and application instructions
 - Mention cost considerations when relevant
-- Keep responses focused and helpful
+- Keep responses focused, helpful and summarised
 - If unsure, recommend consulting local extension services
 
 Respond in a helpful, knowledgeable tone suitable for both hobbyist gardeners and professional organic farmers."""
@@ -53,6 +53,7 @@ Respond in a helpful, knowledgeable tone suitable for both hobbyist gardeners an
     def _test_connection(self) -> bool:
         """Test connection to LM Studio server"""
         try:
+            # First try to connect to the base URL
             response = requests.get(
                 f"{self.base_url}/v1/models",
                 timeout=5
@@ -60,14 +61,31 @@ Respond in a helpful, knowledgeable tone suitable for both hobbyist gardeners an
             if response.status_code == 200:
                 self.available = True
                 models = response.json()
-                logger.info(f"✅ Connected to LM Studio. Available models: {len(models.get('data', []))}")
+                model_count = len(models.get('data', []))
+                logger.info(f"✅ Connected to LM Studio. Available models: {model_count}")
+                
+                if model_count == 0:
+                    logger.warning("⚠️ LM Studio connected but no models loaded!")
+                    logger.warning("   Please load a model in LM Studio to use chat features")
+                
                 return True
+            elif response.status_code == 404:
+                logger.warning(f"⚠️ LM Studio API not found (404). Check if:")
+                logger.warning(f"   1. LM Studio is running on {self.base_url}")
+                logger.warning(f"   2. The local server is enabled in LM Studio")
+                logger.warning(f"   3. Try different port if not using default 1234")
+                return False
             else:
                 logger.warning(f"⚠️ LM Studio responded with status {response.status_code}")
                 return False
                 
+        except requests.exceptions.ConnectionError:
+            logger.warning(f"⚠️ Cannot connect to LM Studio at {self.base_url}")
+            logger.warning("   Make sure LM Studio is running and local server is enabled")
+            self.available = False
+            return False
         except requests.exceptions.RequestException as e:
-            logger.warning(f"⚠️ Cannot connect to LM Studio at {self.base_url}: {e}")
+            logger.warning(f"⚠️ Connection error: {e}")
             self.available = False
             return False
 
@@ -128,7 +146,12 @@ Respond in a helpful, knowledgeable tone suitable for both hobbyist gardeners an
                     logger.error("❌ Invalid response format from LM Studio")
                     return self._generate_fallback_response(user_message)
             else:
-                logger.error(f"❌ LM Studio API error: {response.status_code}")
+                logger.error(f"❌ LM Studio API error: {response.status_code} - {response.text}")
+                if response.status_code == 404:
+                    logger.error("🚨 404 Error: LM Studio server not found. Check if:")
+                    logger.error("   1. LM Studio is running")
+                    logger.error("   2. Server is on http://localhost:1234")
+                    logger.error("   3. A model is loaded in LM Studio")
                 return self._generate_fallback_response(user_message)
                 
         except requests.exceptions.Timeout:

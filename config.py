@@ -21,7 +21,7 @@ class Config:
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     
     # Model settings
-    MODEL_PATH = 'models/pest_classifier.h5'
+    MODEL_PATH = 'models/best_pest_model.h5'
     CONFIDENCE_THRESHOLD = 0.6
     IMAGE_SIZE = (224, 224)
     
