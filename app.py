@@ -61,15 +61,13 @@ class SmartPestClassifier:
     
     def __init__(self):
         self.model = None
-        self.demo_mode = True
+        self.model_loaded = False
         self.confidence_threshold = 0.6
         
         # Try to load trained model first
         model_paths = [
-            'models/pest_classifier_mobilenetv2.h5',
-            'models/pest_classifier.h5',
-            '../models/pest_classifier_mobilenetv2.h5',
-            '../models/pest_classifier.h5'
+            'models/best_pest_model.h5',
+
         ]
         
         if TF_AVAILABLE:
@@ -79,7 +77,7 @@ class SmartPestClassifier:
                         logger.info(f"🤖 Loading trained AI model from {model_path}...")
                         self.model = tf.keras.models.load_model(model_path)
                         self.class_names = PEST_CLASSES  # Use config classes
-                        self.demo_mode = False
+                        self.model_loaded = True
                         logger.info("✅ Trained AI model loaded successfully!")
                         logger.info(f"🎯 Model can identify: {', '.join(self.class_names)}")
                         break
@@ -87,25 +85,26 @@ class SmartPestClassifier:
                         logger.error(f"❌ Failed to load model from {model_path}: {e}")
                         continue
         
-        if self.demo_mode:
+        if not self.model_loaded:
             if not TF_AVAILABLE:
-                logger.info("📝 TensorFlow not available - using demo mode")
+                logger.error("❌ TensorFlow not available - cannot load AI model")
             else:
-                logger.info("📝 No trained model found - using demo mode")
-            self._setup_demo_mode()
+                logger.error("❌ No trained model found - pest identification unavailable")
+            self.class_names = []
     
-    def _setup_demo_mode(self):
-        """Setup demo mode with fallback pest classes"""
-        self.demo_mode = True
-        self.class_names = [
-            'ants', 'bees', 'beetle', 'catterpillar', 'earthworms', 'earwig',
-            'grasshopper', 'moth', 'slug', 'snail', 'wasp', 'weevil'
-        ]
-        logger.info("🎭 Demo mode active - predictions will be simulated")
     
     def predict(self, image):
-        """Predict pest type using trained model or demo logic"""
+        """Predict pest type using trained model"""
         try:
+            # Check if model is available
+            if not self.model_loaded or self.model is None:
+                return {
+                    'pest_name': 'Model Not Available',
+                    'confidence': 0,
+                    'prediction_success': False,
+                    'error': 'No trained AI model available. Please ensure a valid model file is present.'
+                }
+            
             if isinstance(image, str):
                 # If image is base64 string
                 image_data = base64.b64decode(image.split(',')[1] if ',' in image else image)
@@ -113,14 +112,11 @@ class SmartPestClassifier:
             
             # Convert to RGB if necessary
             if image.mode != 'RGB':
+                logger.info(f"🔄 Converting image from {image.mode} to RGB")
                 image = image.convert('RGB')
             
-            if not self.demo_mode and self.model is not None:
-                # Use trained AI model
-                return self._predict_with_ai(image)
-            else:
-                # Use demo prediction
-                return self._predict_demo(image)
+            # Use trained AI model
+            return self._predict_with_ai(image)
                 
         except Exception as e:
             logger.error(f"Prediction error: {e}")
@@ -134,85 +130,79 @@ class SmartPestClassifier:
     def _predict_with_ai(self, image):
         """Use trained AI model for prediction"""
         try:
-            # Preprocess image for model
-            img_array = np.array(image.resize((224, 224)))
-            img_array = img_array / 255.0  # Normalize
-            img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-            
+            # Debug: Log original image mode and size
+            logger.info(f"🔍 Original image mode: {image.mode}, size: {image.size}")
+
+            # Ensure image is RGB - be more explicit about conversion
+            if image.mode != 'RGB':
+                logger.info(f"🔄 Converting image from {image.mode} to RGB")
+                image = image.convert('RGB')
+
+            # Verify conversion worked
+            logger.info(f"🔍 After conversion - image mode: {image.mode}")
+
+            # Resize image to match model expectations (224x224 as required by the trained model)
+            resized_image = image.resize((224, 224))
+            logger.info(f"🔍 Resized image size: {resized_image.size}")
+
+            # Convert to numpy array
+            img_array = np.array(resized_image)
+            logger.info(f"🔍 Initial numpy array shape: {img_array.shape}")
+
+            # Double-check we have the right number of channels
+            if len(img_array.shape) == 2:
+                logger.error("❌ Got 2D array (grayscale) - converting to 3-channel")
+                img_array = np.stack([img_array, img_array, img_array], axis=-1)
+            elif len(img_array.shape) == 3 and img_array.shape[-1] == 1:
+                logger.error("❌ Got 3D array with 1 channel - converting to 3-channel")
+                img_array = np.repeat(img_array, 3, axis=-1)
+            elif len(img_array.shape) == 3 and img_array.shape[-1] == 4:
+                logger.info("🔄 Got 4-channel image (RGBA) - converting to RGB")
+                img_array = img_array[:, :, :3]  # Remove alpha channel
+
+            # Final shape check
+            if len(img_array.shape) != 3 or img_array.shape[-1] != 3:
+                logger.error(f"❌ Unexpected array shape after conversion: {img_array.shape}")
+                raise ValueError(f"Could not convert image to proper RGB format. Shape: {img_array.shape}")
+
+            logger.info(f"✅ Final image array shape: {img_array.shape}")
+
+            # Convert to float32 and normalize to [0, 1] range
+            img_array = img_array.astype(np.float32) / 255.0
+
+            # Add batch dimension
+            img_array = np.expand_dims(img_array, axis=0)
+
+            # Debug logging
+            logger.info(f"🔍 Image shape before prediction: {img_array.shape}")
+            logger.info(f"🔍 Image value range: [{img_array.min():.3f}, {img_array.max():.3f}]")
+
             # Make prediction
             predictions = self.model.predict(img_array, verbose=0)
-            
+
             # Get results
             predicted_class_idx = np.argmax(predictions[0])
             confidence = float(predictions[0][predicted_class_idx])
             pest_name = self.class_names[predicted_class_idx]
-            
+
             logger.info(f"🤖 AI Prediction: {pest_name} ({confidence*100:.1f}%)")
-            
+
             return {
                 'pest_name': pest_name,
                 'confidence': confidence * 100,
                 'prediction_success': confidence >= self.confidence_threshold,
                 'model_type': 'AI'
             }
-            
+
         except Exception as e:
             logger.error(f"AI prediction failed: {e}")
-            # Fall back to demo mode
-            return self._predict_demo(image)
-    
-    def _predict_demo(self, image):
-        """Demo prediction for when no trained model is available"""
-        try:
-            # Simple color-based classification for demo
-            img_array = np.array(image.resize((224, 224)))
-            
-            # Calculate average color values
-            avg_red = np.mean(img_array[:, :, 0])
-            avg_green = np.mean(img_array[:, :, 1])
-            avg_blue = np.mean(img_array[:, :, 2])
-            
-            # Simple heuristic classification based on dominant colors
-            if avg_green > avg_red and avg_green > avg_blue:
-                # Green dominant - likely plant area
-                pest_index = random.choice([0, 4, 6])  # ants, earthworms, grasshopper
-                confidence = 0.75 + random.uniform(-0.15, 0.15)
-            elif avg_red > avg_green and avg_red > avg_blue:
-                # Red dominant
-                pest_index = random.choice([2, 7])  # beetle, moth
-                confidence = 0.70 + random.uniform(-0.10, 0.20)
-            elif avg_blue > avg_red and avg_blue > avg_green:
-                # Blue dominant
-                pest_index = random.choice([1, 11])  # bees, weevil
-                confidence = 0.65 + random.uniform(-0.15, 0.25)
-            else:
-                # Mixed colors
-                pest_index = random.choice(range(len(self.class_names)))
-                confidence = 0.60 + random.uniform(-0.10, 0.30)
-            
-            # Ensure confidence is within bounds
-            confidence = max(0.5, min(0.95, confidence))
-            
-            pest_name = self.class_names[pest_index]
-            
-            logger.info(f"🎭 Demo Prediction: {pest_name} ({confidence*100:.1f}%)")
-            
-            return {
-                'pest_name': pest_name,
-                'confidence': confidence * 100,
-                'prediction_success': confidence >= self.confidence_threshold,
-                'model_type': 'Demo'
-            }
-            
-        except Exception as e:
-            logger.error(f"Demo prediction error: {e}")
             return {
                 'pest_name': 'Error in Classification',
                 'confidence': 0,
                 'prediction_success': False,
-                'error': str(e)
+                'error': f'AI prediction failed: {str(e)}'
             }
-
+    
 class SimpleTreatmentDatabase:
     """Simple treatment recommendations"""
     
@@ -271,9 +261,10 @@ def analyze():
                 'treatment': treatment
             })
         else:
+            error_message = prediction_result.get('error', 'Could not identify the pest. Please try with a clearer image.')
             return jsonify({
                 'success': False,
-                'message': 'Could not identify the pest. Please try with a clearer image.'
+                'message': error_message
             })
             
     except Exception as e:
@@ -293,7 +284,7 @@ def chat():
         # Use LLM service if available
         if LLM_AVAILABLE and organic_guard_llm is not None:
             response = organic_guard_llm.generate_response(message)
-            model_used = 'lmstudio' if organic_guard_llm.available else 'specialized_fallback'
+            model_used = 'lmstudio' if hasattr(organic_guard_llm, 'available') and organic_guard_llm.available else 'specialized_fallback'
         else:
             # Fallback to basic response generation
             response = generate_chat_response(message)
@@ -344,11 +335,7 @@ def generate_chat_response(message):
     else:
         return "I can help with pest identification and organic treatments. Try uploading a photo or ask about specific pests like aphids, beetles, or slugs."
 
-if __name__ == '__main__':
-    # Run the simplified application
-    app.run(debug=True, host='0.0.0.0', port=5000)
-
-def generate_chat_response(message):
+def generate_chat_response_detailed(message):
     """Generate chat responses based on user input"""
     message = message.lower()
     
@@ -470,18 +457,19 @@ def api_analyze_base64():
         prediction_result = pest_model.predict(image_data)
         
         if prediction_result['prediction_success']:
-            treatment_info = treatment_db.get_treatment_info(prediction_result['pest_name'])
+            treatment = treatment_db.get_treatment(prediction_result['pest_name'])
             
             return jsonify({
                 'success': True,
                 'pest_name': prediction_result['pest_name'],
                 'confidence': prediction_result['confidence'],
-                'treatment': treatment_info
+                'treatment': treatment
             })
         else:
+            error_message = prediction_result.get('error', 'Could not identify the pest. Please try with a clearer image.')
             return jsonify({
                 'success': False,
-                'message': 'Could not identify the pest. Please try with a clearer image.'
+                'message': error_message
             })
             
     except Exception as e:
@@ -496,7 +484,14 @@ def allowed_file(filename):
 if __name__ == '__main__':
     # Run the application with LM Studio LLM integration
     logger.info("🚀 Starting OrganicGuard AI with LM Studio LLM integration")
-    if LLM_AVAILABLE and organic_guard_llm is not None and organic_guard_llm.available:
+    
+    # Check model status
+    if pest_model.model_loaded:
+        logger.info("🤖 AI model loaded and ready for pest identification")
+    else:
+        logger.warning("⚠️ No AI model available - pest identification will show error messages")
+    
+    if LLM_AVAILABLE and organic_guard_llm is not None and hasattr(organic_guard_llm, 'available') and organic_guard_llm.available:
         logger.info(f"🤖 LM Studio LLM ready and available")
     else:
         logger.info("📝 Running in fallback mode - install LM Studio for advanced AI chat")
